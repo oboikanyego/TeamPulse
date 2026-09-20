@@ -1,7 +1,24 @@
 import pg from 'pg';
 
 const { Pool } = pg;
-const databaseUrl = process.env.DATABASE_URL?.trim();
+function normalizeDatabaseUrl(raw?: string): string | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    const region = process.env.DATABASE_REGION?.trim();
+    if (/^dpg-[a-z0-9-]+$/i.test(url.hostname) && region) {
+      url.hostname = `${url.hostname}.${region}-postgres.render.com`;
+      if (!url.searchParams.has('sslmode')) url.searchParams.set('sslmode','require');
+      return url.toString();
+    }
+    return value;
+  } catch {
+    return value;
+  }
+}
+
+const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 const pool = databaseUrl
   ? new Pool({ connectionString: databaseUrl, ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false } })
   : null;
