@@ -5,6 +5,8 @@ import cors from 'cors';
 import express, { type Response } from 'express';
 import helmet from 'helmet';
 import { Server } from 'socket.io';
+import swaggerUi from 'swagger-ui-express';
+import { openApiSpec } from './openapi.js';
 import { authRequired, type AuthedRequest, signToken, verifyToken, type Role } from './auth.js';
 import {
   commentSchema,
@@ -46,9 +48,14 @@ const notifications:Notification[] = [];
 const now = () => new Date().toISOString();
 const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 const app = express();
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(v => v.trim()) }));
 app.use(express.json({ limit:'1mb' }));
+app.get('/openapi.json', (_req,res) => res.json(openApiSpec));
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+  customSiteTitle: 'TeamPulse API Docs',
+  swaggerOptions: { persistAuthorization: true, displayRequestDuration: true }
+}));
 
 const server = http.createServer(app);
 const io = new Server(server, { cors:{ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(v => v.trim()) } });
