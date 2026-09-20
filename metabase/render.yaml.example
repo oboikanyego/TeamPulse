@@ -1,0 +1,44 @@
+# Optional Render Blueprint for Metabase Open Source.
+# This file is intentionally NOT the repository root render.yaml so it is never applied accidentally.
+# Metabase recommends >= 1 CPU / 1 GB RAM; 1c-2g is selected for safe headroom.
+services:
+  - type: web
+    name: teampulse-metabase
+    runtime: docker
+    plan: 1c-2g
+    rootDir: metabase
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: MB_DB_TYPE
+        value: postgres
+      - key: MB_DB_DBNAME
+        fromDatabase:
+          name: teampulse-metabase-db
+          property: database
+      - key: MB_DB_PORT
+        fromDatabase:
+          name: teampulse-metabase-db
+          property: port
+      - key: MB_DB_USER
+        fromDatabase:
+          name: teampulse-metabase-db
+          property: user
+      - key: MB_DB_PASS
+        fromDatabase:
+          name: teampulse-metabase-db
+          property: password
+      - key: MB_DB_HOST
+        fromDatabase:
+          name: teampulse-metabase-db
+          property: host
+      - key: JAVA_TIMEZONE
+        value: Africa/Johannesburg
+      - key: MB_SITE_NAME
+        value: TeamPulse Analytics
+databases:
+  - name: teampulse-metabase-db
+    plan: free
+    databaseName: metabase
+    user: metabase

@@ -36,11 +36,11 @@ import type { ExecutiveReport } from '../models';
       </article>
     }
     <article class="card settings-card metabase-card">
-      <div class="panel-head"><div><p class="eyebrow">METABASE BI</p><h2>Embedded executive dashboard</h2></div><span class="pill">{{metabaseConfigured() ? 'Connected' : 'Native fallback'}}</span></div>
+      <div class="panel-head"><div><p class="eyebrow">METABASE OPEN SOURCE</p><h2>Embedded executive dashboard</h2></div><span class="pill">{{metabaseConfigured() ? 'Connected' : 'Native fallback'}}</span></div>
       @if(metabaseConfigured() && metabaseUrl()){
         <iframe class="metabase-frame" [src]="metabaseUrl()" title="TeamPulse Metabase dashboard"></iframe>
       } @else {
-        <p class="muted">Metabase embedding is ready but not configured in this environment. Native TeamPulse reporting above remains fully usable. Configure METABASE_URL, METABASE_SECRET_KEY and METABASE_DASHBOARD_ID to activate the workspace-scoped BI embed.</p>
+        <p class="muted">Metabase Open Source guest embedding is integrated but not configured in this environment. Native TeamPulse reporting above remains fully usable. Configure METABASE_URL, METABASE_SECRET_KEY and METABASE_DASHBOARD_ID to activate the workspace-scoped dashboard.</p>
       }
     </article>
   `
