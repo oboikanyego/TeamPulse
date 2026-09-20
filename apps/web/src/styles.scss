@@ -262,3 +262,13 @@ textarea { min-height: 100px; resize: vertical; }
 .burndown-track{height:18px;background:#f1f3f6;border-radius:9px;overflow:hidden;position:relative}.burndown-track span{position:absolute;left:0;height:50%}.burndown-track .ideal{top:0;background:#b8c0d9}.burndown-track .actual{bottom:0;background:#6c63ff}
 .capacity-table{display:grid;gap:0}.capacity-row{display:grid;grid-template-columns:1.6fr .7fr .7fr .8fr 1.1fr 1.2fr;gap:12px;align-items:center;padding:12px 4px;border-top:1px solid #eef1f5;font-size:13px}.capacity-row.header{font-size:11px;font-weight:800;color:#7b8698;border-top:0}.capacity-row>span:first-child{display:grid}.capacity-row small{color:#8a94a6}.capacity-input{width:72px;padding:7px 8px}.util-wrap{display:grid;gap:5px}.util-wrap .progress{height:7px}
 @media(max-width:950px){.analytics-grid{grid-template-columns:1fr}.capacity-table{overflow-x:auto}.capacity-row{min-width:760px}.time-entry-form{grid-template-columns:1fr 1fr}.time-note{grid-column:1/-1}}
+
+
+/* GitHub engineering insights */
+.github-grid{display:grid;gap:20px}.github-repo{padding:22px}.repo-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.repo-head h2{margin:4px 0 0}
+.latest-commit{display:grid;gap:5px;background:#f7f8fb;border-radius:12px;padding:14px;margin:16px 0}.latest-commit span,.latest-commit small{color:#7b8698;font-size:11px}.latest-commit strong{font-size:13px}
+.repo-split{display:grid;grid-template-columns:1fr 1fr;gap:20px}.github-list{display:grid;gap:8px}.github-row{display:flex;justify-content:space-between;gap:14px;align-items:center;text-decoration:none;color:inherit;padding:10px 0;border-top:1px solid #eef1f5}
+.github-row>div{display:grid;gap:3px}.github-row strong{font-size:12px}.github-row small{font-size:11px;color:#8a94a6}.github-row>span{font-size:11px;color:#667085;text-transform:capitalize}
+.github-task-section{margin-top:22px;padding-top:22px;border-top:1px solid #e8ebf1}.github-link-form{display:grid;grid-template-columns:1fr 1fr 90px auto;gap:8px;margin-bottom:12px}
+.error-text{color:#b42318;background:#fff1f0;border-radius:10px;padding:12px}
+@media(max-width:850px){.repo-split{grid-template-columns:1fr}.github-link-form{grid-template-columns:1fr 1fr}.github-link-form button{grid-column:1/-1}}
