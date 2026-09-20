@@ -36,3 +36,12 @@ The OpenAPI 3.0 specification is versioned in `apps/api/src/openapi.ts`. The API
 ## GitHub integration
 
 The API reads GitHub repository, pull request, commit and Actions data on demand. Public repositories work anonymously within GitHub's unauthenticated rate limits; `GITHUB_TOKEN` is optional and should only be provided through deployment environment variables. TeamPulse stores only workspace repository coordinates and task-to-PR references in the current data layer.
+
+
+## Persistence and runtime hardening
+
+Production persistence is provided through a managed PostgreSQL state store when `DATABASE_URL` is configured. The API initializes the state table at startup, restores application state before serving requests, batches persistence writes after mutations, and exposes `/ready` separately from `/health`.
+
+Redis is optional and used as a cache adapter when `REDIS_URL` is configured. Keys are namespaced with `teampulse:` to avoid collisions when sharing a Redis instance. GitHub engineering insights use a short-lived cache to reduce external API calls.
+
+The embedded PGlite runtime has been removed from the production API dependency graph to avoid memory pressure on the free Render service.
