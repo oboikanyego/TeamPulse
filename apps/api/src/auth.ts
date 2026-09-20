@@ -17,6 +17,15 @@ export function signToken(user: JwtUser): string {
   return jwt.sign(user, secret(), { expiresIn: '12h' });
 }
 
+export function verifyToken(token: string | undefined): JwtUser | null {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, secret()) as JwtUser;
+  } catch {
+    return null;
+  }
+}
+
 export function authRequired(req: AuthedRequest, res: Response, next: NextFunction): void {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
