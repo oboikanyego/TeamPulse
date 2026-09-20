@@ -95,7 +95,7 @@ export async function loadState<T>(): Promise<T | null> {
 }
 
 export async function saveState(payload: unknown): Promise<void> {
-  if (!pool) return;
+  if (!pool || !persistenceAvailable) return;
   const state = payload as any;
   const client = await pool.connect();
   try {
