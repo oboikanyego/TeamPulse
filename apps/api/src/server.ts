@@ -127,7 +127,7 @@ async function requireWorkspace(
   res: Response,
   allowed: Role[] = ['admin', 'manager', 'member']
 ): Promise<Role | null> {
-  const role = await membership(req.user!.id, param(param(req.params.workspaceId)));
+  const role = await membership(req.user!.id, param(req.params.workspaceId));
   if (!role) {
     res.status(403).json({ message: 'Workspace access denied' });
     return null;
@@ -237,7 +237,7 @@ app.post('/api/workspaces/:workspaceId/members', async (req: AuthedRequest, res)
      ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=EXCLUDED.role`,
     [param(req.params.workspaceId), user.rows[0].id, body.role]
   );
-  await logActivity(param(param(req.params.workspaceId)), req.user!.id, 'member', user.rows[0].id, 'updated workspace membership', { role: body.role });
+  await logActivity(param(req.params.workspaceId), req.user!.id, 'member', user.rows[0].id, 'updated workspace membership', { role: body.role });
   res.status(201).json({ ...user.rows[0], role: body.role });
 });
 
@@ -262,14 +262,14 @@ app.post('/api/workspaces/:workspaceId/projects', async (req: AuthedRequest, res
      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [param(req.params.workspaceId), body.name, body.description, body.status, body.priority, body.startDate ?? null, body.targetDate ?? null, req.user!.id]
   );
-  await logActivity(param(param(req.params.workspaceId)), req.user!.id, 'project', result.rows[0].id, 'created project', { name: body.name });
-  await invalidateDashboard(param(param(req.params.workspaceId)));
+  await logActivity(param(req.params.workspaceId), req.user!.id, 'project', result.rows[0].id, 'created project', { name: body.name });
+  await invalidateDashboard(param(req.params.workspaceId));
   io.to(`workspace:${param(req.params.workspaceId)}`).emit('project.updated', result.rows[0]);
   res.status(201).json(result.rows[0]);
 });
 
 app.get('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
-  const workspaceId = await projectWorkspace(param(param(req.params.projectId)));
+  const workspaceId = await projectWorkspace(param(req.params.projectId));
   if (!workspaceId || !(await membership(req.user!.id, workspaceId))) return res.status(403).json({ message: 'Project access denied' });
   const result = await pool.query(
     `SELECT t.*,a.name AS assignee_name,r.name AS reporter_name
@@ -284,7 +284,7 @@ app.get('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
 });
 
 app.post('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
-  const workspaceId = await projectWorkspace(param(param(req.params.projectId)));
+  const workspaceId = await projectWorkspace(param(req.params.projectId));
   if (!workspaceId) return res.status(404).json({ message: 'Project not found' });
   const role = await membership(req.user!.id, workspaceId);
   if (!role) return res.status(403).json({ message: 'Project access denied' });
@@ -307,7 +307,7 @@ app.post('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
 });
 
 app.patch('/api/tasks/:taskId', async (req: AuthedRequest, res) => {
-  const context = await taskContext(param(param(req.params.taskId)));
+  const context = await taskContext(param(req.params.taskId));
   if (!context) return res.status(404).json({ message: 'Task not found' });
   if (!(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const body = taskPatchSchema.parse(req.body);
@@ -329,14 +329,14 @@ app.patch('/api/tasks/:taskId', async (req: AuthedRequest, res) => {
     `UPDATE tasks SET ${fields.join(',')},updated_at=now() WHERE id=$${values.length} RETURNING *`,
     values
   );
-  await logActivity(context.workspaceId, req.user!.id, 'task', param(param(req.params.taskId)), 'updated task', body);
+  await logActivity(context.workspaceId, req.user!.id, 'task', param(req.params.taskId), 'updated task', body);
   await invalidateDashboard(context.workspaceId);
   io.to(`workspace:${context.workspaceId}`).emit('task.updated', result.rows[0]);
   res.json(result.rows[0]);
 });
 
 app.get('/api/tasks/:taskId/comments', async (req: AuthedRequest, res) => {
-  const context = await taskContext(param(param(req.params.taskId)));
+  const context = await taskContext(param(req.params.taskId));
   if (!context || !(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const result = await pool.query(
     `SELECT c.id,c.body,c.created_at,u.id AS user_id,u.name AS user_name
@@ -348,7 +348,7 @@ app.get('/api/tasks/:taskId/comments', async (req: AuthedRequest, res) => {
 });
 
 app.post('/api/tasks/:taskId/comments', async (req: AuthedRequest, res) => {
-  const context = await taskContext(param(param(req.params.taskId)));
+  const context = await taskContext(param(req.params.taskId));
   if (!context || !(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const body = commentSchema.parse(req.body);
   const result = await pool.query(
