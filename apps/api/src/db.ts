@@ -15,7 +15,7 @@ const embedded = managedPool
   ? null
   : new PGlite(process.env.PGLITE_DATA_DIR || './.teampulse-data');
 
-type DbResult = { rows: Record<string, any>[]; rowCount: number };
+type DbResult = { rows: any[]; rowCount: number };
 type DbClient = {
   query: (sql: string, params?: unknown[]) => Promise<DbResult>;
   release: () => void;
