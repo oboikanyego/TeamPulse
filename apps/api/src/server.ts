@@ -39,6 +39,7 @@ const activities:Activity[] = [];
 const notifications:Notification[] = [];
 
 const now = () => new Date().toISOString();
+const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map(v => v.trim()) }));
@@ -93,7 +94,8 @@ async function seed() {
     tasks.push({id:randomUUID(),project_id:project.id,title,description,type,status,priority,assignee_id,reporter_id:admin.id,story_points,due_date:null,labels,updated_at:now()});
   }
   logActivity(workspace.id,admin.id,'project',project.id,'created project',{name:project.name});
-  logActivity(workspace.id,manager.id,'task',tasks[0].id,'moved task',{title:tasks[0].title,status:'In Progress'});
+  const firstTask = tasks[0]!;
+  logActivity(workspace.id,manager.id,'task',firstTask.id,'moved task',{title:firstTask.title,status:'In Progress'});
   notifications.push({id:randomUUID(),user_id:developer.id,message:'You were assigned Graph notifications',read_at:null});
 }
 
@@ -154,8 +156,8 @@ app.post('/api/workspaces',(req:AuthedRequest,res)=>{
 });
 
 app.get('/api/workspaces/:workspaceId/projects',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId)) return;
-  res.json(projects.filter(p=>p.workspace_id===req.params.workspaceId).map(p=>({
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
+  res.json(projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId)).map(p=>({
     ...p,
     task_count:tasks.filter(t=>t.project_id===p.id).length,
     done_count:tasks.filter(t=>t.project_id===p.id&&t.status==='Done').length,
@@ -164,16 +166,16 @@ app.get('/api/workspaces/:workspaceId/projects',(req:AuthedRequest,res)=>{
 });
 
 app.post('/api/workspaces/:workspaceId/projects',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId,['admin','manager'])) return;
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId),['admin','manager'])) return;
   const body=projectSchema.parse(req.body);
-  const project:Project={id:randomUUID(),workspace_id:req.params.workspaceId,name:body.name,description:body.description??'',status:body.status,priority:body.priority,owner_id:req.user!.id};
+  const project:Project={id:randomUUID(),workspace_id:routeParam(req.params.workspaceId),name:body.name,description:body.description??'',status:body.status,priority:body.priority,owner_id:req.user!.id};
   projects.push(project); logActivity(project.workspace_id,req.user!.id,'project',project.id,'created project',{name:project.name});
   res.status(201).json({...project,task_count:0,done_count:0,blocked_count:0});
 });
 
 app.get('/api/workspaces/:workspaceId/dashboard',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId)) return;
-  const ps=projects.filter(p=>p.workspace_id===req.params.workspaceId);
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
+  const ps=projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId));
   const ids=new Set(ps.map(p=>p.id));
   const ts=tasks.filter(t=>ids.has(t.project_id));
   const weekAgo=Date.now()-7*86400000;
@@ -186,40 +188,40 @@ app.get('/api/workspaces/:workspaceId/dashboard',(req:AuthedRequest,res)=>{
       overdue:ts.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<Date.now()).length
     },
     projects:ps.map(p=>{const pt=ts.filter(t=>t.project_id===p.id);return{id:p.id,name:p.name,status:p.status,priority:p.priority,total:pt.length,done:pt.filter(t=>t.status==='Done').length,blocked:pt.filter(t=>t.status==='Blocked').length};}),
-    workload:memberships.filter(m=>m.workspace_id===req.params.workspaceId).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,active:ts.filter(t=>t.assignee_id===u.id&&t.status!=='Done').length};})
+    workload:memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,active:ts.filter(t=>t.assignee_id===u.id&&t.status!=='Done').length};})
   });
 });
 
 app.get('/api/workspaces/:workspaceId/activity',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId)) return;
-  res.json(activities.filter(a=>a.workspace_id===req.params.workspaceId).map(a=>({...a,actor_name:users.find(u=>u.id===a.actor_id)?.name??'System'})).slice(0,50));
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
+  res.json(activities.filter(a=>a.workspace_id===routeParam(req.params.workspaceId)).map(a=>({...a,actor_name:users.find(u=>u.id===a.actor_id)?.name??'System'})).slice(0,50));
 });
 
 app.get('/api/workspaces/:workspaceId/members',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId)) return;
-  const projectIds=new Set(projects.filter(p=>p.workspace_id===req.params.workspaceId).map(p=>p.id));
-  res.json(memberships.filter(m=>m.workspace_id===req.params.workspaceId).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,email:u.email,avatar_url:u.avatar_url,role:m.role,active_tasks:tasks.filter(t=>projectIds.has(t.project_id)&&t.assignee_id===u.id&&t.status!=='Done').length};}));
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
+  const projectIds=new Set(projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId)).map(p=>p.id));
+  res.json(memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,email:u.email,avatar_url:u.avatar_url,role:m.role,active_tasks:tasks.filter(t=>projectIds.has(t.project_id)&&t.assignee_id===u.id&&t.status!=='Done').length};}));
 });
 
 app.post('/api/workspaces/:workspaceId/members',async(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId,['admin'])) return;
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId),['admin'])) return;
   const body=memberSchema.parse(req.body);
   let user=users.find(u=>u.email===body.email);
-  if(!user){user={id:randomUUID(),name:body.email.split('@')[0],email:body.email,avatar_url:null,password_hash:await bcrypt.hash('Welcome123!',10)};users.push(user);}
-  const existing=memberships.find(m=>m.workspace_id===req.params.workspaceId&&m.user_id===user!.id);
-  if(existing) existing.role=body.role as Role; else memberships.push({workspace_id:req.params.workspaceId,user_id:user.id,role:body.role as Role});
-  logActivity(req.params.workspaceId,req.user!.id,'member',user.id,'added member',{name:user.name,role:body.role});
+  if(!user){const generatedName=body.email.split('@')[0] || 'New member';user={id:randomUUID(),name:generatedName,email:body.email,avatar_url:null,password_hash:await bcrypt.hash('Welcome123!',10)};users.push(user);}
+  const existing=memberships.find(m=>m.workspace_id===routeParam(req.params.workspaceId)&&m.user_id===user!.id);
+  if(existing) existing.role=body.role as Role; else memberships.push({workspace_id:routeParam(req.params.workspaceId),user_id:user.id,role:body.role as Role});
+  logActivity(routeParam(req.params.workspaceId),req.user!.id,'member',user.id,'added member',{name:user.name,role:body.role});
   res.status(201).json({id:user.id,name:user.name,email:user.email,avatar_url:user.avatar_url,role:body.role,active_tasks:0});
 });
 
 app.get('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
-  const project=projects.find(p=>p.id===req.params.projectId); if(!project) return res.status(404).json({message:'Project not found'});
+  const project=projects.find(p=>p.id===routeParam(req.params.projectId)); if(!project) return res.status(404).json({message:'Project not found'});
   if(!requireWorkspace(req,res,project.workspace_id)) return;
   res.json(tasks.filter(t=>t.project_id===project.id).map(t=>({...t,assignee_name:users.find(u=>u.id===t.assignee_id)?.name??null,reporter_name:users.find(u=>u.id===t.reporter_id)?.name??null})));
 });
 
 app.post('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
-  const project=projects.find(p=>p.id===req.params.projectId); if(!project) return res.status(404).json({message:'Project not found'});
+  const project=projects.find(p=>p.id===routeParam(req.params.projectId)); if(!project) return res.status(404).json({message:'Project not found'});
   if(!requireWorkspace(req,res,project.workspace_id,['admin','manager'])) return;
   const body=taskSchema.parse(req.body);
   const task:Task={id:randomUUID(),project_id:project.id,title:body.title,description:body.description??'',type:body.type,status:body.status,priority:body.priority,assignee_id:body.assigneeId??null,reporter_id:req.user!.id,story_points:body.storyPoints??null,due_date:body.dueDate??null,labels:body.labels??[],updated_at:now()};
@@ -229,7 +231,7 @@ app.post('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
 });
 
 app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
-  const task=tasks.find(t=>t.id===req.params.taskId); if(!task) return res.status(404).json({message:'Task not found'});
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
   const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
   const body=taskPatchSchema.parse(req.body);
   if(body.title!==undefined)task.title=body.title;
@@ -248,13 +250,13 @@ app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
 });
 
 app.get('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{
-  const task=tasks.find(t=>t.id===req.params.taskId); if(!task) return res.status(404).json({message:'Task not found'});
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
   const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
   res.json(comments.filter(c=>c.task_id===task.id).map(c=>({...c,user_name:users.find(u=>u.id===c.user_id)?.name??'Unknown'})));
 });
 
 app.post('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{
-  const task=tasks.find(t=>t.id===req.params.taskId); if(!task) return res.status(404).json({message:'Task not found'});
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
   const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
   const body=commentSchema.parse(req.body);
   const comment:Comment={id:randomUUID(),task_id:task.id,user_id:req.user!.id,body:body.body,created_at:now()}; comments.push(comment);
@@ -263,13 +265,13 @@ app.post('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{
 });
 
 app.get('/api/workspaces/:workspaceId/search',(req:AuthedRequest,res)=>{
-  if(!requireWorkspace(req,res,req.params.workspaceId)) return;
+  if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
   const q=String(req.query.q??'').toLowerCase().trim(); if(!q) return res.json([]);
   const result:any[]=[];
-  for(const p of projects.filter(p=>p.workspace_id===req.params.workspaceId&&p.name.toLowerCase().includes(q))) result.push({kind:'project',id:p.id,title:p.name,subtitle:p.status});
-  const pids=new Set(projects.filter(p=>p.workspace_id===req.params.workspaceId).map(p=>p.id));
+  for(const p of projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId)&&p.name.toLowerCase().includes(q))) result.push({kind:'project',id:p.id,title:p.name,subtitle:p.status});
+  const pids=new Set(projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId)).map(p=>p.id));
   for(const t of tasks.filter(t=>pids.has(t.project_id)&&t.title.toLowerCase().includes(q))) result.push({kind:'task',id:t.id,title:t.title,subtitle:t.status});
-  for(const m of memberships.filter(m=>m.workspace_id===req.params.workspaceId)){const u=users.find(x=>x.id===m.user_id)!;if(u.name.toLowerCase().includes(q)||u.email.includes(q))result.push({kind:'member',id:u.id,title:u.name,subtitle:u.email});}
+  for(const m of memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId))){const u=users.find(x=>x.id===m.user_id)!;if(u.name.toLowerCase().includes(q)||u.email.includes(q))result.push({kind:'member',id:u.id,title:u.name,subtitle:u.email});}
   res.json(result.slice(0,20));
 });
 
