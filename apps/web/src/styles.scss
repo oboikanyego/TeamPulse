@@ -230,3 +230,20 @@ textarea { min-height: 100px; resize: vertical; }
   .search-wrap > span { display: none; }
   .task-detail { border-radius: 0; }
 }
+
+
+/* Sprint planning */
+.planning-hero{display:flex;justify-content:space-between;gap:28px;align-items:center;margin-bottom:24px;padding:28px}
+.planning-hero h2{margin:4px 0 8px;font-size:28px}.planning-hero p{margin:0;color:var(--muted,#667085)}
+.planning-meta{display:flex;gap:10px;align-items:center;margin-top:16px;font-size:13px;color:#667085}
+.sprint-score{min-width:260px;text-align:right}.sprint-score strong{display:block;font-size:42px;letter-spacing:-.04em}.sprint-score>span{display:block;margin:5px 0 12px;color:#667085;font-size:13px}
+.planning-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,.8fr);gap:22px;align-items:start}
+.planning-column{min-width:0}.sprint-list,.backlog-list{display:grid;gap:14px}
+.sprint-card{padding:20px}.sprint-card.active-sprint{border-color:#8b83ff;box-shadow:0 0 0 3px #6c63ff12}
+.sprint-title-row{display:flex;justify-content:space-between;gap:16px;align-items:start}.sprint-title-row h3{margin:9px 0 0}.sprint-title-row>strong{font-size:22px}
+.sprint-card>p{color:#667085;line-height:1.55}.mini-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:18px 0}
+.mini-stats span{background:#f7f8fb;border-radius:10px;padding:10px;font-size:11px;color:#667085}.mini-stats b{display:block;color:#17233b;font-size:16px;margin-bottom:3px}
+.backlog-item{padding:16px;display:flex;justify-content:space-between;gap:18px;align-items:center}.backlog-item h3{margin:6px 0}.backlog-item p{margin:0;color:#667085;font-size:13px;line-height:1.45}
+.backlog-actions{display:flex;gap:10px;align-items:center;flex-shrink:0}.backlog-actions select{min-width:150px}
+@media(max-width:1050px){.planning-grid{grid-template-columns:1fr}.planning-hero{align-items:flex-start}.sprint-score{min-width:220px}}
+@media(max-width:700px){.planning-hero{flex-direction:column}.sprint-score{width:100%;min-width:0;text-align:left}.mini-stats{grid-template-columns:repeat(2,1fr)}.backlog-item{align-items:flex-start;flex-direction:column}.backlog-actions{width:100%}.backlog-actions select{flex:1}}
