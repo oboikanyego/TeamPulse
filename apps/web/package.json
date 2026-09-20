@@ -26,5 +26,8 @@
     "@angular/compiler": "^22.1.7",
     "@angular/compiler-cli": "^22.1.7",
     "typescript": "^6.0.2"
+  },
+  "overrides": {
+    "@peculiar/asn1-x509-attr": "2.9.4"
   }
 }
