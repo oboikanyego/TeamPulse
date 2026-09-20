@@ -82,3 +82,8 @@ Runtime automation defaults:
 - deduplication: task status/version, due date, workflow-run ID, and digest date
 
 The Render free service can sleep when idle, so interval-based automations are best-effort on the free tier. The manual automation endpoint remains available for deterministic testing.
+
+
+### GitHub CI automation reliability
+
+CI-failure automation first reuses the short-lived engineering-insights cache, then falls back to GitHub's Actions API. Public repositories can work without credentials, but shared-host unauthenticated rate limits can return HTTP 403. Set `GITHUB_TOKEN` on the API service for reliable scheduled CI polling in production.
