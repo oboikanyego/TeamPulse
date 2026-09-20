@@ -67,3 +67,18 @@ Required production configuration:
 - `REDIS_URL`: optional Redis/Key Value connection URL. TeamPulse prefixes cache keys with `teampulse:`.
 
 Without `DATABASE_URL`, the API remains available in the explicit `memory-fallback` mode and reports that mode from `/health`.
+
+
+## Phase 6 — Notifications, Slack & automation
+
+TeamPulse now supports workspace-level notification preferences, in-app notifications, Slack incoming-webhook delivery, task assignment/blocker/sprint alerts, hourly overdue and GitHub Actions failure checks, deduplicated automation history, manual automation runs for testing, and daily delivery digests.
+
+Slack webhook URLs are write-only from the browser perspective: read APIs return only whether Slack is configured, whether delivery is enabled, the optional channel label, and the last update timestamp.
+
+Runtime automation defaults:
+- automation interval: 1 hour via `AUTOMATION_INTERVAL_MS` (minimum 1 hour)
+- digest hour: 06:00 UTC via `AUTOMATION_DIGEST_HOUR_UTC`
+- CI checks: latest completed non-success GitHub Actions run per connected repository
+- deduplication: task status/version, due date, workflow-run ID, and digest date
+
+The Render free service can sleep when idle, so interval-based automations are best-effort on the free tier. The manual automation endpoint remains available for deterministic testing.

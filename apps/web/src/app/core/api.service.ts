@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Activity, Comment, Dashboard, DeliveryAnalytics, GitHubInsights, GitHubRepository, GitHubTaskLink, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TimeEntry, Workspace } from '../models';
+import type { Activity, AutomationEvent, Comment, Dashboard, DeliveryAnalytics, GitHubInsights, GitHubRepository, GitHubTaskLink, Member, NotificationPreferences, NotificationSettings, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TeamPulseNotification, TimeEntry, Workspace } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -142,7 +142,38 @@ export class ApiService {
     return this.http.post<GitHubTaskLink>(`${this.base}/tasks/${taskId}/github-link`, body);
   }
 
+  notificationSettings(workspaceId: string) {
+    return this.http.get<NotificationSettings>(`${this.base}/workspaces/${workspaceId}/notification-settings`);
+  }
+
+  updateNotificationPreferences(workspaceId: string, body: {
+    taskAssigned:boolean; taskBlocked:boolean; taskOverdue:boolean; sprintChanged:boolean;
+    ciFailed:boolean; dailyDigest:boolean; slackEnabled:boolean;
+  }) {
+    return this.http.patch<NotificationPreferences>(`${this.base}/workspaces/${workspaceId}/notification-preferences`, body);
+  }
+
+  configureSlack(workspaceId: string, body: { webhookUrl?:string|null; channelName?:string|null; enabled:boolean }) {
+    return this.http.put<NotificationSettings['slack']>(`${this.base}/workspaces/${workspaceId}/slack`, body);
+  }
+
+  testSlack(workspaceId: string) {
+    return this.http.post<{sent:boolean}>(`${this.base}/workspaces/${workspaceId}/slack/test`, {});
+  }
+
+  runAutomations(workspaceId: string, includeDigest = false) {
+    return this.http.post<{alerts:number;digest:boolean}>(`${this.base}/workspaces/${workspaceId}/automations/run`, { includeDigest });
+  }
+
+  automationHistory(workspaceId: string) {
+    return this.http.get<AutomationEvent[]>(`${this.base}/workspaces/${workspaceId}/automation-history`);
+  }
+
   notifications() {
-    return this.http.get<Array<{ id: string; message: string; read_at: string | null }>>(`${this.base}/notifications`);
+    return this.http.get<TeamPulseNotification[]>(`${this.base}/notifications`);
+  }
+
+  markNotificationRead(notificationId: string) {
+    return this.http.patch<TeamPulseNotification>(`${this.base}/notifications/${notificationId}/read`, {});
   }
 }

@@ -32,6 +32,7 @@ import type { Project, SearchResult, Workspace } from '../models';
           <a routerLink="/planning" routerLinkActive="active"><span>◫</span>Sprints</a>
           <a routerLink="/analytics" routerLinkActive="active"><span>◒</span>Analytics</a>
           <a routerLink="/engineering" routerLinkActive="active"><span>⌘</span>Engineering</a>
+          <a routerLink="/notifications" routerLinkActive="active"><span>♢</span>Notifications</a>
         </nav>
 
         <div class="sidebar-section">
@@ -73,7 +74,7 @@ import type { Project, SearchResult, Workspace } from '../models';
           </div>
           <div class="top-actions">
             <span class="live-pill"><i></i>Live</span>
-            <button class="icon-btn" title="Notifications">♢<b class="notif">{{ unread() }}</b></button>
+            <button class="icon-btn" title="Notifications" (click)="openNotifications()">♢<b class="notif">{{ unread() }}</b></button>
           </div>
         </header>
         <section class="page"><router-outlet /></section>
@@ -167,6 +168,10 @@ export class ShellComponent {
         this.projectModal.set(false);
         void this.router.navigate(['/project', project.id]);
       });
+  }
+
+  openNotifications(): void {
+    void this.router.navigateByUrl('/notifications');
   }
 
   openResult(result: SearchResult): void {

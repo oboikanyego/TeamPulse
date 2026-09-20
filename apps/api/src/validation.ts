@@ -84,3 +84,24 @@ export const githubTaskLinkSchema = z.object({
   repo: z.string().min(1).max(100),
   pullNumber: z.number().int().positive()
 });
+
+
+export const notificationPreferencesSchema = z.object({
+  taskAssigned: z.boolean().default(true),
+  taskBlocked: z.boolean().default(true),
+  taskOverdue: z.boolean().default(true),
+  sprintChanged: z.boolean().default(true),
+  ciFailed: z.boolean().default(true),
+  dailyDigest: z.boolean().default(true),
+  slackEnabled: z.boolean().default(false)
+});
+
+export const slackIntegrationSchema = z.object({
+  webhookUrl: z.string().url().startsWith('https://hooks.slack.com/').nullable().optional(),
+  channelName: z.string().max(100).nullable().optional(),
+  enabled: z.boolean().default(true)
+});
+
+export const automationRunSchema = z.object({
+  includeDigest: z.boolean().default(false)
+});
