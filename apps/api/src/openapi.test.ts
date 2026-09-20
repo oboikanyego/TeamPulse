@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { openApiSpec } from './openapi.js';
 
-test('OpenAPI documents core delivery, GitHub, notifications, Slack and automation endpoints', () => {
+test('OpenAPI documents TeamPulse phases 1 through 11', () => {
   assert.equal(openApiSpec.openapi, '3.0.3');
   assert.ok(openApiSpec.paths['/auth/login']);
   assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/planning']);
@@ -23,4 +23,15 @@ test('OpenAPI documents core delivery, GitHub, notifications, Slack and automati
   assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/automations/run']);
   assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/automation-history']);
   assert.ok(openApiSpec.paths['/notifications/{notificationId}/read']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/permissions']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/audit']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/reports/executive']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/reports/export.csv']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/metabase/embed']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/assistant']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/onboarding']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/invitations']);
+  assert.ok(openApiSpec.paths['/invitations/{token}/accept']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/settings']);
+  assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/billing']);
 });
