@@ -5,7 +5,7 @@ import express, { type Response } from 'express';
 import helmet from 'helmet';
 import { Redis } from 'ioredis';
 import { Server } from 'socket.io';
-import { authRequired, type AuthedRequest, signToken, type Role } from './auth.js';
+import { authRequired, type AuthedRequest, signToken, type Role, verifyToken } from './auth.js';
 import { bootstrapDatabase, pool } from './db.js';
 import {
   commentSchema,
@@ -42,12 +42,22 @@ if (process.env.REDIS_URL) {
   redis.connect().catch((error: Error) => console.warn('Redis connection skipped:', error.message));
 }
 
+io.use((socket, next) => {
+  const user = verifyToken(socket.handshake.auth?.token as string | undefined);
+  if (!user) return next(new Error('Authentication required'));
+  socket.data.user = user;
+  next();
+});
+
 io.on('connection', (socket) => {
-  socket.on('workspace:join', (workspaceId: string) => {
-    if (workspaceId) socket.join(`workspace:${workspaceId}`);
+  socket.on('workspace:join', async (workspaceId: string) => {
+    const userId = socket.data.user?.id as string | undefined;
+    if (workspaceId && userId && await membership(userId, workspaceId)) {
+      await socket.join(`workspace:${workspaceId}`);
+    }
   });
-  socket.on('workspace:leave', (workspaceId: string) => {
-    if (workspaceId) socket.leave(`workspace:${workspaceId}`);
+  socket.on('workspace:leave', async (workspaceId: string) => {
+    if (workspaceId) await socket.leave(`workspace:${workspaceId}`);
   });
 });
 
