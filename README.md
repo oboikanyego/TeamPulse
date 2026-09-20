@@ -13,6 +13,7 @@ TeamPulse gives small engineering teams a production-style workspace for project
 - PostgreSQL
 - Redis
 - Socket.IO
+- Swagger / OpenAPI
 - GitHub Actions
 - Render
 
@@ -31,4 +32,13 @@ Seeded automatically in non-production environments and when `SEED_DEMO=true`:
 - `.github/workflows` — CI
 - `docs` — architecture and product documentation
 
-The production URLs will be added after the first successful deployment.
+## Production
+
+- Web: https://teampulse-web-bk.onrender.com
+- API: https://teampulse-api-bk.onrender.com
+- Swagger: https://teampulse-api-bk.onrender.com/docs
+- OpenAPI JSON: https://teampulse-api-bk.onrender.com/openapi.json
+
+## Phase 2 — Sprint planning
+
+TeamPulse now supports sprint creation, Planned/Active/Completed lifecycle states, backlog-to-sprint assignment, sprint goals and dates, point-based completion metrics, and sprint activity events.
