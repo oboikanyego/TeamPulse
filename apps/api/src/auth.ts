@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
@@ -11,7 +12,8 @@ export interface JwtUser {
 
 export type AuthedRequest = Request & { user?: JwtUser };
 
-const secret = () => process.env.JWT_SECRET || 'dev-only-secret-change-me';
+const runtimeSecret = process.env.JWT_SECRET || randomBytes(48).toString('base64url');
+const secret = () => runtimeSecret;
 
 export function signToken(user: JwtUser): string {
   return jwt.sign(user, secret(), { expiresIn: '12h' });
