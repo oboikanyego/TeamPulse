@@ -1,0 +1,10 @@
+{
+  "name": "teampulse",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --prefix apps/api run build",
+    "build:web": "npm --prefix apps/web run build",
+    "test": "npm --prefix apps/api test"
+  }
+}

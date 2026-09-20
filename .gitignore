@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.angular/
+coverage/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+.teampulse-data/
+apps/api/.teampulse-data/

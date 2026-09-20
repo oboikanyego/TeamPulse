@@ -1,0 +1,96 @@
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+import { environment } from '../../environments/environment';
+import type { Activity, Comment, Dashboard, Member, Project, SearchResult, Task, TaskStatus, Workspace } from '../models';
+
+@Injectable({ providedIn: 'root' })
+export class ApiService {
+  private readonly http = inject(HttpClient);
+  private readonly base = environment.apiUrl;
+
+  workspaces() {
+    return this.http.get<Workspace[]>(`${this.base}/workspaces`);
+  }
+
+  createWorkspace(body: { name: string; description: string }) {
+    return this.http.post<Workspace>(`${this.base}/workspaces`, body);
+  }
+
+  projects(workspaceId: string) {
+    return this.http.get<Project[]>(`${this.base}/workspaces/${workspaceId}/projects`);
+  }
+
+  createProject(workspaceId: string, body: { name: string; description: string; status: string; priority: string }) {
+    return this.http.post<Project>(`${this.base}/workspaces/${workspaceId}/projects`, body);
+  }
+
+  dashboard(workspaceId: string) {
+    return this.http.get<Dashboard>(`${this.base}/workspaces/${workspaceId}/dashboard`);
+  }
+
+  activity(workspaceId: string) {
+    return this.http.get<Activity[]>(`${this.base}/workspaces/${workspaceId}/activity`);
+  }
+
+  members(workspaceId: string) {
+    return this.http.get<Member[]>(`${this.base}/workspaces/${workspaceId}/members`);
+  }
+
+  addMember(workspaceId: string, body: { email: string; role: string }) {
+    return this.http.post<Member>(`${this.base}/workspaces/${workspaceId}/members`, body);
+  }
+
+  tasks(projectId: string) {
+    return this.http.get<Task[]>(`${this.base}/projects/${projectId}/tasks`);
+  }
+
+  createTask(projectId: string, body: {
+    title: string;
+    description: string;
+    type: string;
+    status: TaskStatus;
+    priority: string;
+    assigneeId?: string | null;
+    storyPoints?: number | null;
+    dueDate?: string | null;
+    labels?: string[];
+  }) {
+    return this.http.post<Task>(`${this.base}/projects/${projectId}/tasks`, body);
+  }
+
+  updateTask(taskId: string, body: Partial<Task> & { status?: TaskStatus }) {
+    const mapped = {
+      ...body,
+      assigneeId: body.assignee_id,
+      storyPoints: body.story_points,
+      dueDate: body.due_date
+    } as Record<string, unknown>;
+    delete mapped['assignee_id'];
+    delete mapped['assignee_name'];
+    delete mapped['reporter_name'];
+    delete mapped['story_points'];
+    delete mapped['due_date'];
+    delete mapped['updated_at'];
+    delete mapped['project_id'];
+    delete mapped['id'];
+    return this.http.patch<Task>(`${this.base}/tasks/${taskId}`, mapped);
+  }
+
+  comments(taskId: string) {
+    return this.http.get<Comment[]>(`${this.base}/tasks/${taskId}/comments`);
+  }
+
+  addComment(taskId: string, body: string) {
+    return this.http.post<Comment>(`${this.base}/tasks/${taskId}/comments`, { body });
+  }
+
+  search(workspaceId: string, q: string) {
+    return this.http.get<SearchResult[]>(`${this.base}/workspaces/${workspaceId}/search`, {
+      params: new HttpParams().set('q', q)
+    });
+  }
+
+  notifications() {
+    return this.http.get<Array<{ id: string; message: string; read_at: string | null }>>(`${this.base}/notifications`);
+  }
+}
