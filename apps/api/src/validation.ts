@@ -39,7 +39,7 @@ export const taskPatchSchema = taskSchema.partial();
 
 export const memberSchema = z.object({
   email: z.string().email().transform((value) => value.toLowerCase()),
-  role: z.enum(['admin', 'manager', 'member'])
+  role: z.enum(['admin', 'manager', 'member', 'viewer'])
 });
 
 export const commentSchema = z.object({
@@ -104,4 +104,26 @@ export const slackIntegrationSchema = z.object({
 
 export const automationRunSchema = z.object({
   includeDigest: z.boolean().default(false)
+});
+
+
+export const roleUpdateSchema = z.object({
+  role: z.enum(['admin','manager','member','viewer'])
+});
+
+export const invitationSchema = z.object({
+  email: z.string().email().transform(v => v.toLowerCase()),
+  role: z.enum(['admin','manager','member','viewer']).default('member')
+});
+
+export const workspaceSettingsSchema = z.object({
+  name: z.string().min(2).max(100),
+  description: z.string().max(500).default(''),
+  timezone: z.string().min(2).max(80).default('Africa/Johannesburg'),
+  weekStartsOn: z.enum(['monday','sunday']).default('monday')
+});
+
+export const assistantSchema = z.object({
+  focus: z.enum(['delivery','risks','team','sprint','executive']).default('delivery'),
+  question: z.string().max(500).default('')
 });
