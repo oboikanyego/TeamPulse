@@ -223,18 +223,28 @@ async function runWorkspaceAutomation(workspaceId:string,includeDigest=false){
       alerts++;
     }
   }
+  const cachedInsights=await cacheGet<any>(`github-insights:${workspaceId}`);
   for(const repository of githubRepositories.filter(r=>r.workspace_id===workspaceId)){
     try{
-      const runs=await githubJson(`/repos/${repository.owner}/${repository.repo}/actions/runs?per_page=5`);
-      const failed=(runs.workflow_runs??[]).find((r:any)=>r.status==='completed'&&r.conclusion&&r.conclusion!=='success'&&r.conclusion!=='skipped');
+      let failed:any=null;
+      const cachedRepo=cachedInsights?.repositories?.find((item:any)=>item.repository_id===repository.id);
+      if(cachedRepo?.latest_ci?.status==='completed' && cachedRepo.latest_ci.conclusion && cachedRepo.latest_ci.conclusion!=='success' && cachedRepo.latest_ci.conclusion!=='skipped'){
+        failed={id:`cached-${cachedRepo.latest_ci.updated_at}`,name:cachedRepo.latest_ci.name,head_branch:cachedRepo.default_branch??'default',...cachedRepo.latest_ci};
+      }else{
+        const runs=await githubJson(`/repos/${repository.owner}/${repository.repo}/actions/runs?per_page=5`);
+        failed=(runs.workflow_runs??[]).find((r:any)=>r.status==='completed'&&r.conclusion&&r.conclusion!=='success'&&r.conclusion!=='skipped');
+      }
       if(failed){
         const key=`ci:${repository.id}:${failed.id}`;
         if(recordAutomationEvent(workspaceId,key,'ci_failed',failed.name)){
-          await notifyWorkspace(workspaceId,'ci_failed',`CI failure in ${repository.owner}/${repository.repo}: ${failed.name} on ${failed.head_branch}`);
+          await notifyWorkspace(workspaceId,'ci_failed',`CI failure in ${repository.owner}/${repository.repo}: ${failed.name} on ${failed.head_branch??'default branch'}`);
           alerts++;
         }
       }
-    }catch(error){ console.error('CI automation check failed',error); }
+    }catch(error){
+      const message=error instanceof Error?error.message:'GitHub unavailable';
+      if(!message.includes('403')) console.error('CI automation check failed',error);
+    }
   }
 
   const digestHour=Number(process.env.AUTOMATION_DIGEST_HOUR_UTC??6);
