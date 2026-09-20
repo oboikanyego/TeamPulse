@@ -61,3 +61,14 @@ export const sprintStatusSchema = z.object({
 export const taskSprintSchema = z.object({
   sprintId: z.string().uuid().nullable()
 });
+
+
+export const timeEntrySchema = z.object({
+  minutes: z.number().int().min(1).max(1440),
+  note: z.string().max(500).default(''),
+  spentAt: z.string().nullable().optional()
+});
+
+export const capacitySchema = z.object({
+  weeklyMinutes: z.number().int().min(60).max(10080)
+});
