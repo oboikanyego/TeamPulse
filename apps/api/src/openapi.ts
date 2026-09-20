@@ -2,7 +2,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'TeamPulse API',
-    version: '6.0.0',
+    version: '11.0.0',
     description: 'REST API for TeamPulse workspaces, projects, delivery planning, tasks, team collaboration and realtime delivery operations.'
   },
   servers: [
@@ -12,7 +12,7 @@ export const openApiSpec = {
   tags: [
     { name: 'Auth' }, { name: 'Workspaces' }, { name: 'Projects' }, { name: 'Sprints' },
     { name: 'Tasks' }, { name: 'Team' }, { name: 'Comments' }, { name: 'Dashboard' },
-    { name: 'Search' }, { name: 'Notifications' }, { name: 'Slack' }, { name: 'Automations' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }, { name: 'System' }
+    { name: 'Search' }, { name: 'Governance' }, { name: 'Reports' }, { name: 'Assistant' }, { name: 'Onboarding' }, { name: 'Billing' }, { name: 'Metabase' }, { name: 'Notifications' }, { name: 'Slack' }, { name: 'Automations' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }, { name: 'System' }
   ],
   components: {
     securitySchemes: {
@@ -20,7 +20,7 @@ export const openApiSpec = {
     },
     schemas: {
       User: { type: 'object', properties: { id:{type:'string',format:'uuid'}, name:{type:'string'}, email:{type:'string',format:'email'}, avatar_url:{type:'string',nullable:true} } },
-      Workspace: { type:'object', properties:{ id:{type:'string',format:'uuid'}, name:{type:'string'}, description:{type:'string'}, role:{type:'string',enum:['admin','manager','member']}, project_count:{type:'integer'} } },
+      Workspace: { type:'object', properties:{ id:{type:'string',format:'uuid'}, name:{type:'string'}, description:{type:'string'}, role:{type:'string',enum:['admin','manager','member','viewer']}, project_count:{type:'integer'} } },
       Project: { type:'object', properties:{ id:{type:'string',format:'uuid'}, workspace_id:{type:'string',format:'uuid'}, name:{type:'string'}, description:{type:'string'}, status:{type:'string',enum:['Planning','Active','At Risk','Completed','Archived']}, priority:{type:'string',enum:['Low','Medium','High','Critical']} } },
       Sprint: { type:'object', properties:{ id:{type:'string',format:'uuid'}, workspace_id:{type:'string',format:'uuid'}, name:{type:'string'}, goal:{type:'string'}, status:{type:'string',enum:['Planned','Active','Completed']}, start_date:{type:'string',nullable:true}, end_date:{type:'string',nullable:true}, task_count:{type:'integer'}, completed_count:{type:'integer'}, blocked_count:{type:'integer'}, total_points:{type:'integer'}, completed_points:{type:'integer'} } },
       Task: { type:'object', properties:{ id:{type:'string',format:'uuid'}, project_id:{type:'string',format:'uuid'}, sprint_id:{type:'string',format:'uuid',nullable:true}, title:{type:'string'}, description:{type:'string'}, type:{type:'string',enum:['Feature','Bug','Task','Improvement','Spike']}, status:{type:'string',enum:['Backlog','To Do','In Progress','Blocked','Review','Done']}, priority:{type:'string',enum:['Low','Medium','High','Critical']}, assignee_id:{type:'string',format:'uuid',nullable:true}, story_points:{type:'integer',nullable:true}, due_date:{type:'string',nullable:true}, labels:{type:'array',items:{type:'string'}} } },
@@ -90,7 +90,7 @@ export const openApiSpec = {
     '/workspaces/{workspaceId}/members': {
       parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],
       get:{tags:['Team'],summary:'List workspace members and workload',responses:{'200':{description:'Member list'}}},
-      post:{tags:['Team'],summary:'Add or update a workspace member',description:'Requires admin role.',requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['email','role'],properties:{email:{type:'string',format:'email'},role:{type:'string',enum:['admin','manager','member']}}}}}},responses:{'201':{description:'Member added'}}}
+      post:{tags:['Team'],summary:'Add or update a workspace member',description:'Requires admin role.',requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['email','role'],properties:{email:{type:'string',format:'email'},role:{type:'string',enum:['admin','manager','member','viewer']}}}}}},responses:{'201':{description:'Member added'}}}
     },
     '/workspaces/{workspaceId}/dashboard': {
       get:{tags:['Dashboard'],summary:'Get delivery KPIs and workload',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Dashboard'}}}
@@ -113,6 +113,44 @@ export const openApiSpec = {
     },
     '/tasks/{taskId}/github-links': {
       get:{tags:['GitHub','Tasks'],summary:'List GitHub pull requests linked to a task',parameters:[{name:'taskId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Linked pull requests'}}}
+    },
+    '/workspaces/{workspaceId}/permissions': {
+      get:{tags:['Governance'],summary:'Get current member role and permission set',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Permission profile'}}}
+    },
+    '/workspaces/{workspaceId}/members/{userId}/role': {
+      patch:{tags:['Governance'],summary:'Change workspace member role',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}},{name:'userId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Role updated'}}}
+    },
+    '/workspaces/{workspaceId}/audit': {
+      get:{tags:['Governance'],summary:'Get workspace audit trail',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Audit entries'}}}
+    },
+    '/workspaces/{workspaceId}/reports/executive': {
+      get:{tags:['Reports'],summary:'Get executive delivery report',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Executive report'}}}
+    },
+    '/workspaces/{workspaceId}/reports/export.csv': {
+      get:{tags:['Reports'],summary:'Export task delivery report as CSV',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'CSV export'}}}
+    },
+    '/workspaces/{workspaceId}/metabase/embed': {
+      get:{tags:['Metabase'],summary:'Get a signed workspace-scoped Metabase dashboard URL',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Embed configuration or fallback state'}}}
+    },
+    '/workspaces/{workspaceId}/assistant': {
+      post:{tags:['Assistant'],summary:'Generate deterministic delivery insights from workspace data',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Delivery assistant response'}}}
+    },
+    '/workspaces/{workspaceId}/onboarding': {
+      get:{tags:['Onboarding'],summary:'Get workspace onboarding progress',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Onboarding progress'}}}
+    },
+    '/workspaces/{workspaceId}/invitations': {
+      get:{tags:['Onboarding'],summary:'List workspace invitations',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Invitations'}}},
+      post:{tags:['Onboarding'],summary:'Create workspace invitation',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'201':{description:'Invitation created'}}}
+    },
+    '/invitations/{token}/accept': {
+      post:{tags:['Onboarding'],summary:'Accept an invitation for the authenticated user',parameters:[{name:'token',in:'path',required:true,schema:{type:'string'}}],responses:{'200':{description:'Invitation accepted'}}}
+    },
+    '/workspaces/{workspaceId}/settings': {
+      get:{tags:['Workspaces'],summary:'Get workspace settings and plan metadata',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Workspace settings'}}},
+      patch:{tags:['Workspaces'],summary:'Update workspace settings',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Settings updated'}}}
+    },
+    '/workspaces/{workspaceId}/billing': {
+      get:{tags:['Billing'],summary:'Get billing-ready plan and seat metadata',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Billing state'}}}
     },
     '/workspaces/{workspaceId}/notification-settings': {
       get:{tags:['Notifications'],summary:'Get workspace notification preferences and masked Slack status',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Notification settings'}}}
