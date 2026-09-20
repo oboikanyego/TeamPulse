@@ -12,8 +12,11 @@ import {
   memberSchema,
   projectSchema,
   registerSchema,
+  sprintSchema,
+  sprintStatusSchema,
   taskPatchSchema,
   taskSchema,
+  taskSprintSchema,
   workspaceSchema
 } from './validation.js';
 
@@ -24,7 +27,8 @@ type User = { id:string; name:string; email:string; avatar_url:string|null; pass
 type Workspace = { id:string; name:string; description:string; owner_id:string };
 type Membership = { workspace_id:string; user_id:string; role:Role };
 type Project = { id:string; workspace_id:string; name:string; description:string; status:string; priority:string; owner_id:string|null };
-type Task = { id:string; project_id:string; title:string; description:string; type:string; status:string; priority:string; assignee_id:string|null; reporter_id:string|null; story_points:number|null; due_date:string|null; labels:string[]; updated_at:string };
+type Sprint = { id:string; workspace_id:string; name:string; goal:string; status:'Planned'|'Active'|'Completed'; start_date:string|null; end_date:string|null; created_at:string };
+type Task = { id:string; project_id:string; sprint_id:string|null; title:string; description:string; type:string; status:string; priority:string; assignee_id:string|null; reporter_id:string|null; story_points:number|null; due_date:string|null; labels:string[]; updated_at:string };
 type Comment = { id:string; task_id:string; user_id:string; body:string; created_at:string };
 type Activity = { id:string; workspace_id:string; actor_id:string|null; entity_type:string; entity_id:string|null; action:string; metadata:Record<string,unknown>; created_at:string };
 type Notification = { id:string; user_id:string; message:string; read_at:string|null };
@@ -33,6 +37,7 @@ const users:User[] = [];
 const workspaces:Workspace[] = [];
 const memberships:Membership[] = [];
 const projects:Project[] = [];
+const sprints:Sprint[] = [];
 const tasks:Task[] = [];
 const comments:Comment[] = [];
 const activities:Activity[] = [];
@@ -82,6 +87,9 @@ async function seed() {
   );
   const project:Project={id:randomUUID(),workspace_id:workspace.id,name:'Claims Platform',description:'Modernise claims intake and communications.',status:'Active',priority:'High',owner_id:manager.id};
   projects.push(project);
+  const activeSprint:Sprint={id:randomUUID(),workspace_id:workspace.id,name:'Sprint 12',goal:'Stabilise mailbox intake and finish the delivery dashboard.',status:'Active',start_date:'2026-09-14',end_date:'2026-09-25',created_at:now()};
+  const nextSprint:Sprint={id:randomUUID(),workspace_id:workspace.id,name:'Sprint 13',goal:'Improve resilience and operational visibility.',status:'Planned',start_date:'2026-09-28',end_date:'2026-10-09',created_at:now()};
+  sprints.push(activeSprint,nextSprint);
   const seedTasks:[string,string,string,string,string,string,string|null,number|null,string[]][] = [
     ['Graph notifications','Receive mailbox change notifications','Feature','In Progress','High',developer.id,null,5,['graph','backend']],
     ['Lifecycle handling','Handle subscription lifecycle events','Task','Review','Medium',manager.id,null,3,['graph']],
@@ -91,7 +99,8 @@ async function seed() {
     ['Retry strategy','Design resilient retry handling','Task','Blocked','High',manager.id,null,3,['reliability']]
   ];
   for (const [title,description,type,status,priority,assignee_id,_unused,story_points,labels] of seedTasks) {
-    tasks.push({id:randomUUID(),project_id:project.id,title,description,type,status,priority,assignee_id,reporter_id:admin.id,story_points,due_date:null,labels,updated_at:now()});
+    const sprint_id = status === 'Backlog' ? null : activeSprint.id;
+    tasks.push({id:randomUUID(),project_id:project.id,sprint_id,title,description,type,status,priority,assignee_id,reporter_id:admin.id,story_points,due_date:null,labels,updated_at:now()});
   }
   logActivity(workspace.id,admin.id,'project',project.id,'created project',{name:project.name});
   const firstTask = tasks[0]!;
@@ -192,6 +201,84 @@ app.get('/api/workspaces/:workspaceId/dashboard',(req:AuthedRequest,res)=>{
   });
 });
 
+
+app.get('/api/workspaces/:workspaceId/planning',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const projectIds=new Set(projects.filter(p=>p.workspace_id===workspaceId).map(p=>p.id));
+  const workspaceTasks=tasks.filter(t=>projectIds.has(t.project_id));
+  const sprintPayload=sprints.filter(s=>s.workspace_id===workspaceId).map(s=>{
+    const sprintTasks=workspaceTasks.filter(t=>t.sprint_id===s.id);
+    const totalPoints=sprintTasks.reduce((sum,t)=>sum+(t.story_points??0),0);
+    const completedPoints=sprintTasks.filter(t=>t.status==='Done').reduce((sum,t)=>sum+(t.story_points??0),0);
+    return {
+      ...s,
+      task_count:sprintTasks.length,
+      completed_count:sprintTasks.filter(t=>t.status==='Done').length,
+      blocked_count:sprintTasks.filter(t=>t.status==='Blocked').length,
+      total_points:totalPoints,
+      completed_points:completedPoints
+    };
+  });
+  const backlog=workspaceTasks.filter(t=>!t.sprint_id).map(t=>({
+    ...t,
+    project_name:projects.find(p=>p.id===t.project_id)?.name??'Project',
+    assignee_name:users.find(u=>u.id===t.assignee_id)?.name??null
+  }));
+  res.json({sprints:sprintPayload,backlog});
+});
+
+app.post('/api/workspaces/:workspaceId/sprints',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const body=sprintSchema.parse(req.body);
+  const sprint:Sprint={id:randomUUID(),workspace_id:workspaceId,name:body.name,goal:body.goal??'',status:'Planned',start_date:body.startDate??null,end_date:body.endDate??null,created_at:now()};
+  sprints.push(sprint);
+  logActivity(workspaceId,req.user!.id,'sprint',sprint.id,'created sprint',{name:sprint.name});
+  io.to(`workspace:${workspaceId}`).emit('sprint.updated',sprint);
+  res.status(201).json({...sprint,task_count:0,completed_count:0,blocked_count:0,total_points:0,completed_points:0});
+});
+
+app.patch('/api/sprints/:sprintId/status',(req:AuthedRequest,res)=>{
+  const sprint=sprints.find(s=>s.id===routeParam(req.params.sprintId));
+  if(!sprint) return res.status(404).json({message:'Sprint not found'});
+  if(!requireWorkspace(req,res,sprint.workspace_id,['admin','manager'])) return;
+  const {status}=sprintStatusSchema.parse(req.body);
+  if(status==='Active'){
+    for(const item of sprints.filter(s=>s.workspace_id===sprint.workspace_id&&s.id!==sprint.id&&s.status==='Active')) item.status='Planned';
+  }
+  sprint.status=status;
+  logActivity(sprint.workspace_id,req.user!.id,'sprint',sprint.id,`${status.toLowerCase()} sprint`,{name:sprint.name});
+  io.to(`workspace:${sprint.workspace_id}`).emit('sprint.updated',sprint);
+  res.json(sprint);
+});
+
+app.patch('/api/tasks/:taskId/sprint',(req:AuthedRequest,res)=>{
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
+  if(!task) return res.status(404).json({message:'Task not found'});
+  const workspaceId=taskWorkspace(task)!;
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const {sprintId}=taskSprintSchema.parse(req.body);
+  if(sprintId && !sprints.some(s=>s.id===sprintId&&s.workspace_id===workspaceId)) return res.status(400).json({message:'Sprint does not belong to this workspace'});
+  task.sprint_id=sprintId;
+  task.updated_at=now();
+  logActivity(workspaceId,req.user!.id,'task',task.id,sprintId?'added task to sprint':'moved task to backlog',{title:task.title});
+  io.to(`workspace:${workspaceId}`).emit('task.updated',task);
+  res.json(task);
+});
+
+app.get('/api/sprints/:sprintId',(req:AuthedRequest,res)=>{
+  const sprint=sprints.find(s=>s.id===routeParam(req.params.sprintId));
+  if(!sprint) return res.status(404).json({message:'Sprint not found'});
+  if(!requireWorkspace(req,res,sprint.workspace_id)) return;
+  const sprintTasks=tasks.filter(t=>t.sprint_id===sprint.id).map(t=>({
+    ...t,
+    project_name:projects.find(p=>p.id===t.project_id)?.name??'Project',
+    assignee_name:users.find(u=>u.id===t.assignee_id)?.name??null
+  }));
+  res.json({...sprint,tasks:sprintTasks});
+});
+
 app.get('/api/workspaces/:workspaceId/activity',(req:AuthedRequest,res)=>{
   if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
   res.json(activities.filter(a=>a.workspace_id===routeParam(req.params.workspaceId)).map(a=>({...a,actor_name:users.find(u=>u.id===a.actor_id)?.name??'System'})).slice(0,50));
@@ -224,7 +311,7 @@ app.post('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
   const project=projects.find(p=>p.id===routeParam(req.params.projectId)); if(!project) return res.status(404).json({message:'Project not found'});
   if(!requireWorkspace(req,res,project.workspace_id,['admin','manager'])) return;
   const body=taskSchema.parse(req.body);
-  const task:Task={id:randomUUID(),project_id:project.id,title:body.title,description:body.description??'',type:body.type,status:body.status,priority:body.priority,assignee_id:body.assigneeId??null,reporter_id:req.user!.id,story_points:body.storyPoints??null,due_date:body.dueDate??null,labels:body.labels??[],updated_at:now()};
+  const task:Task={id:randomUUID(),project_id:project.id,sprint_id:null,title:body.title,description:body.description??'',type:body.type,status:body.status,priority:body.priority,assignee_id:body.assigneeId??null,reporter_id:req.user!.id,story_points:body.storyPoints??null,due_date:body.dueDate??null,labels:body.labels??[],updated_at:now()};
   tasks.push(task); logActivity(project.workspace_id,req.user!.id,'task',task.id,'created task',{title:task.title});
   io.to(`workspace:${project.workspace_id}`).emit('task.created',task);
   res.status(201).json({...task,assignee_name:users.find(u=>u.id===task.assignee_id)?.name??null,reporter_name:req.user!.name});
