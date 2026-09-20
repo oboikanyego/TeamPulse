@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { capacitySchema, credentialsSchema, taskSchema, timeEntrySchema } from './validation.js';
+import { capacitySchema, credentialsSchema, githubRepositorySchema, githubTaskLinkSchema, taskSchema, timeEntrySchema } from './validation.js';
 
 test('credentials normalise email', () => {
   const value = credentialsSchema.parse({ email: 'ADMIN@TeamPulse.Demo', password: 'Demo123!' });
@@ -21,4 +21,15 @@ test('time entry validation enforces positive bounded minutes', () => {
 test('capacity validation enforces a sensible weekly range', () => {
   assert.equal(capacitySchema.parse({ weeklyMinutes: 1800 }).weeklyMinutes, 1800);
   assert.throws(() => capacitySchema.parse({ weeklyMinutes: 30 }));
+});
+
+
+test('GitHub repository validation requires owner and repo', () => {
+  assert.equal(githubRepositorySchema.parse({ owner: 'oboikanyego', repo: 'TeamPulse' }).repo, 'TeamPulse');
+  assert.throws(() => githubRepositorySchema.parse({ owner: '', repo: 'TeamPulse' }));
+});
+
+test('GitHub task link validation requires a positive pull request number', () => {
+  assert.equal(githubTaskLinkSchema.parse({ owner: 'oboikanyego', repo: 'TeamPulse', pullNumber: 3 }).pullNumber, 3);
+  assert.throws(() => githubTaskLinkSchema.parse({ owner: 'oboikanyego', repo: 'TeamPulse', pullNumber: 0 }));
 });
