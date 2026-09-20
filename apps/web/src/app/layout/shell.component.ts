@@ -31,6 +31,7 @@ import type { Project, SearchResult, Workspace } from '../models';
           <a routerLink="/team" routerLinkActive="active"><span>◎</span>Team</a>
           <a routerLink="/planning" routerLinkActive="active"><span>◫</span>Sprints</a>
           <a routerLink="/analytics" routerLinkActive="active"><span>◒</span>Analytics</a>
+          <a routerLink="/engineering" routerLinkActive="active"><span>⌘</span>Engineering</a>
         </nav>
 
         <div class="sidebar-section">
