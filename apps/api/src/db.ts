@@ -1,18 +1,68 @@
+import { PGlite } from '@electric-sql/pglite';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
 const { Pool } = pg;
-const databaseUrl = process.env.DATABASE_URL || 'postgresql://teampulse:teampulse@localhost:5432/teampulse';
+const databaseUrl = process.env.DATABASE_URL?.trim();
+const managedPool = databaseUrl
+  ? new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false }
+    })
+  : null;
 
-export const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false }
-});
+const embedded = managedPool
+  ? null
+  : new PGlite(process.env.PGLITE_DATA_DIR || './.teampulse-data');
+
+type DbResult = { rows: Record<string, any>[]; rowCount: number };
+type DbClient = {
+  query: (sql: string, params?: unknown[]) => Promise<DbResult>;
+  release: () => void;
+};
+
+async function query(sql: string, params: unknown[] = []): Promise<DbResult> {
+  if (managedPool) {
+    const result = await managedPool.query(sql, params);
+    return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+  }
+
+  if (!embedded) throw new Error('Database is not initialized');
+
+  if (!params.length && sql.split(';').filter((statement) => statement.trim()).length > 1) {
+    await embedded.exec(sql);
+    return { rows: [], rowCount: 0 };
+  }
+
+  const result = await embedded.query<Record<string, any>>(sql, params);
+  return {
+    rows: result.rows,
+    rowCount: result.affectedRows ?? result.rows.length
+  };
+}
+
+export const pool = {
+  query,
+  async connect(): Promise<DbClient> {
+    if (!managedPool) {
+      return { query, release: () => undefined };
+    }
+
+    const client = await managedPool.connect();
+    return {
+      async query(sql: string, params: unknown[] = []): Promise<DbResult> {
+        const result = await client.query(sql, params);
+        return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+      },
+      release: () => client.release()
+    };
+  }
+};
+
+export const databaseMode = managedPool ? 'managed-postgres' : 'embedded-postgres';
 
 export async function bootstrapDatabase(): Promise<void> {
   await pool.query(`
-    CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
