@@ -15,6 +15,9 @@ import {
   credentialsSchema,
   githubRepositorySchema,
   githubTaskLinkSchema,
+  notificationPreferencesSchema,
+  slackIntegrationSchema,
+  automationRunSchema,
   memberSchema,
   projectSchema,
   registerSchema,
@@ -43,7 +46,10 @@ type Capacity = { workspace_id:string; user_id:string; weekly_minutes:number };
 type GitHubRepository = { id:string; workspace_id:string; owner:string; repo:string; created_at:string };
 type GitHubTaskLink = { task_id:string; repository_id:string; pull_number:number; created_at:string };
 type Activity = { id:string; workspace_id:string; actor_id:string|null; entity_type:string; entity_id:string|null; action:string; metadata:Record<string,unknown>; created_at:string };
-type Notification = { id:string; user_id:string; message:string; read_at:string|null };
+type Notification = { id:string; user_id:string; workspace_id?:string|null; kind?:string; message:string; read_at:string|null; created_at?:string };
+type NotificationPreferences = { workspace_id:string; task_assigned:boolean; task_blocked:boolean; task_overdue:boolean; sprint_changed:boolean; ci_failed:boolean; daily_digest:boolean; slack_enabled:boolean };
+type SlackIntegration = { workspace_id:string; webhook_url:string|null; channel_name:string|null; enabled:boolean; updated_at:string };
+type AutomationEvent = { id:string; workspace_id:string; key:string; kind:string; message:string; created_at:string };
 
 const users:User[] = [];
 const workspaces:Workspace[] = [];
@@ -58,15 +64,19 @@ const githubRepositories:GitHubRepository[] = [];
 const githubTaskLinks:GitHubTaskLink[] = [];
 const activities:Activity[] = [];
 const notifications:Notification[] = [];
+const notificationPreferences:NotificationPreferences[] = [];
+const slackIntegrations:SlackIntegration[] = [];
+const automationEvents:AutomationEvent[] = [];
 
 type PersistedState = {
   users:User[]; workspaces:Workspace[]; memberships:Membership[]; projects:Project[]; sprints:Sprint[];
   tasks:Task[]; comments:Comment[]; timeEntries:TimeEntry[]; capacities:Capacity[];
   githubRepositories:GitHubRepository[]; githubTaskLinks:GitHubTaskLink[]; activities:Activity[]; notifications:Notification[];
+  notificationPreferences?:NotificationPreferences[]; slackIntegrations?:SlackIntegration[]; automationEvents?:AutomationEvent[];
 };
 
 function snapshotState():PersistedState {
-  return {users,workspaces,memberships,projects,sprints,tasks,comments,timeEntries,capacities,githubRepositories,githubTaskLinks,activities,notifications};
+  return {users,workspaces,memberships,projects,sprints,tasks,comments,timeEntries,capacities,githubRepositories,githubTaskLinks,activities,notifications,notificationPreferences,slackIntegrations,automationEvents};
 }
 
 function restoreState(state:PersistedState):void {
@@ -83,6 +93,9 @@ function restoreState(state:PersistedState):void {
   githubTaskLinks.splice(0,githubTaskLinks.length,...state.githubTaskLinks);
   activities.splice(0,activities.length,...state.activities);
   notifications.splice(0,notifications.length,...state.notifications);
+  notificationPreferences.splice(0,notificationPreferences.length,...(state.notificationPreferences??[]));
+  slackIntegrations.splice(0,slackIntegrations.length,...(state.slackIntegrations??[]));
+  automationEvents.splice(0,automationEvents.length,...(state.automationEvents??[]));
 }
 
 let persistQueued=false;
@@ -125,6 +138,122 @@ function logActivity(workspaceId:string, actorId:string|null, entityType:string,
   queuePersist();
   io.to(`workspace:${workspaceId}`).emit('activity.created', item);
   return item;
+}
+
+
+function preferencesFor(workspaceId:string):NotificationPreferences {
+  let prefs=notificationPreferences.find(p=>p.workspace_id===workspaceId);
+  if(!prefs){
+    prefs={workspace_id:workspaceId,task_assigned:true,task_blocked:true,task_overdue:true,sprint_changed:true,ci_failed:true,daily_digest:true,slack_enabled:false};
+    notificationPreferences.push(prefs);
+    queuePersist();
+  }
+  return prefs;
+}
+
+function prefEnabled(workspaceId:string,kind:string):boolean {
+  const p=preferencesFor(workspaceId);
+  return kind==='task_assigned'?p.task_assigned:
+    kind==='task_blocked'?p.task_blocked:
+    kind==='task_overdue'?p.task_overdue:
+    kind==='sprint_changed'?p.sprint_changed:
+    kind==='ci_failed'?p.ci_failed:
+    kind==='daily_digest'?p.daily_digest:true;
+}
+
+function pushNotification(workspaceId:string,userId:string,kind:string,message:string):Notification {
+  const item:Notification={id:randomUUID(),user_id:userId,workspace_id:workspaceId,kind,message,read_at:null,created_at:now()};
+  notifications.unshift(item);
+  io.to(`workspace:${workspaceId}`).emit('notification.created',item);
+  queuePersist();
+  return item;
+}
+
+async function sendSlack(workspaceId:string,message:string):Promise<boolean> {
+  const prefs=preferencesFor(workspaceId);
+  const integration=slackIntegrations.find(s=>s.workspace_id===workspaceId);
+  if(!prefs.slack_enabled || !integration?.enabled || !integration.webhook_url) return false;
+  try{
+    const response=await fetch(integration.webhook_url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:message})});
+    if(!response.ok) throw new Error(`Slack webhook failed: ${response.status}`);
+    return true;
+  }catch(error){
+    console.error('slack notification failed',error);
+    return false;
+  }
+}
+
+async function notifyWorkspace(workspaceId:string,kind:string,message:string,targetUserId?:string|null):Promise<void> {
+  if(!prefEnabled(workspaceId,kind)) return;
+  const recipients=targetUserId ? [targetUserId] : memberships.filter(m=>m.workspace_id===workspaceId).map(m=>m.user_id);
+  for(const userId of new Set(recipients)) pushNotification(workspaceId,userId,kind,message);
+  await sendSlack(workspaceId,`*TeamPulse* · ${message}`);
+}
+
+function recordAutomationEvent(workspaceId:string,key:string,kind:string,message:string):boolean {
+  if(automationEvents.some(e=>e.workspace_id===workspaceId&&e.key===key)) return false;
+  automationEvents.unshift({id:randomUUID(),workspace_id:workspaceId,key,kind,message,created_at:now()});
+  if(automationEvents.length>1000) automationEvents.splice(1000);
+  queuePersist();
+  return true;
+}
+
+function workspaceTasks(workspaceId:string):Task[] {
+  const ids=new Set(projects.filter(p=>p.workspace_id===workspaceId).map(p=>p.id));
+  return tasks.filter(t=>ids.has(t.project_id));
+}
+
+async function runWorkspaceAutomation(workspaceId:string,includeDigest=false){
+  const ws=workspaces.find(w=>w.id===workspaceId);
+  if(!ws) return {alerts:0,digest:false};
+  const list=workspaceTasks(workspaceId);
+  let alerts=0;
+  for(const task of list.filter(t=>t.status==='Blocked')){
+    const key=`blocked:${task.id}:${task.updated_at}`;
+    if(recordAutomationEvent(workspaceId,key,'task_blocked',task.title)){
+      await notifyWorkspace(workspaceId,'task_blocked',`Blocked task: ${task.title}`,task.assignee_id);
+      alerts++;
+    }
+  }
+  const today=Date.now();
+  for(const task of list.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<today)){
+    const key=`overdue:${task.id}:${task.due_date}`;
+    if(recordAutomationEvent(workspaceId,key,'task_overdue',task.title)){
+      await notifyWorkspace(workspaceId,'task_overdue',`Overdue task: ${task.title} (due ${task.due_date})`,task.assignee_id);
+      alerts++;
+    }
+  }
+  for(const repository of githubRepositories.filter(r=>r.workspace_id===workspaceId)){
+    try{
+      const runs=await githubJson(`/repos/${repository.owner}/${repository.repo}/actions/runs?per_page=5`);
+      const failed=(runs.workflow_runs??[]).find((r:any)=>r.status==='completed'&&r.conclusion&&r.conclusion!=='success'&&r.conclusion!=='skipped');
+      if(failed){
+        const key=`ci:${repository.id}:${failed.id}`;
+        if(recordAutomationEvent(workspaceId,key,'ci_failed',failed.name)){
+          await notifyWorkspace(workspaceId,'ci_failed',`CI failure in ${repository.owner}/${repository.repo}: ${failed.name} on ${failed.head_branch}`);
+          alerts++;
+        }
+      }
+    }catch(error){ console.error('CI automation check failed',error); }
+  }
+
+  const digestHour=Number(process.env.AUTOMATION_DIGEST_HOUR_UTC??6);
+  const dateKey=new Date().toISOString().slice(0,10);
+  const shouldDigest=includeDigest || new Date().getUTCHours()>=digestHour;
+  let digest=false;
+  if(shouldDigest && prefEnabled(workspaceId,'daily_digest') && recordAutomationEvent(workspaceId,`digest:${dateKey}`,'daily_digest',dateKey)){
+    const blocked=list.filter(t=>t.status==='Blocked').length;
+    const overdue=list.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<today).length;
+    const done=list.filter(t=>t.status==='Done').length;
+    const active=sprints.find(s=>s.workspace_id===workspaceId&&s.status==='Active');
+    await notifyWorkspace(workspaceId,'daily_digest',`Daily digest for ${ws.name}: ${list.length} tasks · ${done} done · ${blocked} blocked · ${overdue} overdue${active?` · Active sprint: ${active.name}`:''}`);
+    digest=true;
+  }
+  return {alerts,digest};
+}
+
+async function runAllAutomations():Promise<void> {
+  for(const workspace of workspaces) await runWorkspaceAutomation(workspace.id,false);
 }
 
 const githubHeaders = () => ({
@@ -191,7 +320,8 @@ async function seed() {
     {id:randomUUID(),task_id:tasks[1]!.id,user_id:manager.id,minutes:120,note:'Reviewed lifecycle edge cases.',spent_at:'2026-09-17',created_at:now()},
     {id:randomUUID(),task_id:tasks[3]!.id,user_id:developer.id,minutes:150,note:'Dashboard polish and responsive fixes.',spent_at:'2026-09-18',created_at:now()}
   );
-  notifications.push({id:randomUUID(),user_id:developer.id,message:'You were assigned Graph notifications',read_at:null});
+  notifications.push({id:randomUUID(),user_id:developer.id,workspace_id:workspace.id,kind:'task_assigned',message:'You were assigned Graph notifications',read_at:null,created_at:now()});
+  preferencesFor(workspace.id);
 }
 
 io.use((socket,next)=>{
@@ -343,6 +473,7 @@ app.patch('/api/sprints/:sprintId/status',(req:AuthedRequest,res)=>{
   }
   sprint.status=status;
   logActivity(sprint.workspace_id,req.user!.id,'sprint',sprint.id,`${status.toLowerCase()} sprint`,{name:sprint.name});
+  void notifyWorkspace(sprint.workspace_id,'sprint_changed',`Sprint ${sprint.name} is now ${status}`);
   io.to(`workspace:${sprint.workspace_id}`).emit('sprint.updated',sprint);
   res.json(sprint);
 });
@@ -407,6 +538,8 @@ app.post('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
   const body=taskSchema.parse(req.body);
   const task:Task={id:randomUUID(),project_id:project.id,sprint_id:null,title:body.title,description:body.description??'',type:body.type,status:body.status,priority:body.priority,assignee_id:body.assigneeId??null,reporter_id:req.user!.id,story_points:body.storyPoints??null,due_date:body.dueDate??null,labels:body.labels??[],updated_at:now()};
   tasks.push(task); logActivity(project.workspace_id,req.user!.id,'task',task.id,'created task',{title:task.title});
+  if(task.assignee_id) void notifyWorkspace(project.workspace_id,'task_assigned',`You were assigned: ${task.title}`,task.assignee_id);
+  if(task.status==='Blocked') void notifyWorkspace(project.workspace_id,'task_blocked',`Blocked task: ${task.title}`,task.assignee_id);
   io.to(`workspace:${project.workspace_id}`).emit('task.created',task);
   res.status(201).json({...task,assignee_name:users.find(u=>u.id===task.assignee_id)?.name??null,reporter_name:req.user!.name});
 });
@@ -415,6 +548,8 @@ app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
   const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
   const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
   const body=taskPatchSchema.parse(req.body);
+  const previousStatus=task.status;
+  const previousAssignee=task.assignee_id;
   if(body.title!==undefined)task.title=body.title;
   if(body.description!==undefined)task.description=body.description;
   if(body.type!==undefined)task.type=body.type;
@@ -426,6 +561,8 @@ app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
   if(body.labels!==undefined)task.labels=body.labels;
   task.updated_at=now();
   logActivity(workspaceId,req.user!.id,'task',task.id,'updated task',{title:task.title,status:task.status});
+  if(task.assignee_id&&task.assignee_id!==previousAssignee) void notifyWorkspace(workspaceId,'task_assigned',`You were assigned: ${task.title}`,task.assignee_id);
+  if(task.status==='Blocked'&&previousStatus!=='Blocked') void notifyWorkspace(workspaceId,'task_blocked',`Blocked task: ${task.title}`,task.assignee_id);
   const payload={...task,assignee_name:users.find(u=>u.id===task.assignee_id)?.name??null,reporter_name:users.find(u=>u.id===task.reporter_id)?.name??null};
   io.to(`workspace:${workspaceId}`).emit('task.updated',payload); res.json(payload);
 });
@@ -646,7 +783,75 @@ app.get('/api/workspaces/:workspaceId/search',(req:AuthedRequest,res)=>{
   res.json(result.slice(0,20));
 });
 
-app.get('/api/notifications',(req:AuthedRequest,res)=>res.json(notifications.filter(n=>n.user_id===req.user!.id)));
+
+app.get('/api/workspaces/:workspaceId/notification-settings',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const prefs=preferencesFor(workspaceId);
+  const slack=slackIntegrations.find(s=>s.workspace_id===workspaceId);
+  res.json({preferences:prefs,slack:{configured:!!slack?.webhook_url,enabled:slack?.enabled??false,channel_name:slack?.channel_name??null,updated_at:slack?.updated_at??null}});
+});
+
+app.patch('/api/workspaces/:workspaceId/notification-preferences',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const body=notificationPreferencesSchema.parse(req.body);
+  const prefs=preferencesFor(workspaceId);
+  Object.assign(prefs,{
+    task_assigned:body.taskAssigned,task_blocked:body.taskBlocked,task_overdue:body.taskOverdue,
+    sprint_changed:body.sprintChanged,ci_failed:body.ciFailed,daily_digest:body.dailyDigest,slack_enabled:body.slackEnabled
+  });
+  queuePersist();
+  res.json(prefs);
+});
+
+app.put('/api/workspaces/:workspaceId/slack',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin'])) return;
+  const body=slackIntegrationSchema.parse(req.body);
+  let integration=slackIntegrations.find(s=>s.workspace_id===workspaceId);
+  if(!integration){
+    integration={workspace_id:workspaceId,webhook_url:body.webhookUrl??null,channel_name:body.channelName??null,enabled:body.enabled,updated_at:now()};
+    slackIntegrations.push(integration);
+  }else{
+    if(body.webhookUrl!==undefined) integration.webhook_url=body.webhookUrl;
+    if(body.channelName!==undefined) integration.channel_name=body.channelName;
+    integration.enabled=body.enabled; integration.updated_at=now();
+  }
+  preferencesFor(workspaceId).slack_enabled=body.enabled;
+  queuePersist();
+  res.json({configured:!!integration.webhook_url,enabled:integration.enabled,channel_name:integration.channel_name,updated_at:integration.updated_at});
+});
+
+app.post('/api/workspaces/:workspaceId/slack/test',async(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const sent=await sendSlack(workspaceId,`*TeamPulse Slack test* · ${workspaces.find(w=>w.id===workspaceId)?.name??'Workspace'} is connected.`);
+  if(!sent) return res.status(400).json({message:'Slack is not configured or enabled'});
+  res.json({sent:true});
+});
+
+app.post('/api/workspaces/:workspaceId/automations/run',async(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const body=automationRunSchema.parse(req.body??{});
+  res.json(await runWorkspaceAutomation(workspaceId,body.includeDigest));
+});
+
+app.get('/api/workspaces/:workspaceId/automation-history',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  res.json(automationEvents.filter(e=>e.workspace_id===workspaceId).slice(0,100));
+});
+
+app.get('/api/notifications',(req:AuthedRequest,res)=>res.json(notifications.filter(n=>n.user_id===req.user!.id).slice(0,100)));
+
+app.patch('/api/notifications/:notificationId/read',(req:AuthedRequest,res)=>{
+  const item=notifications.find(n=>n.id===routeParam(req.params.notificationId)&&n.user_id===req.user!.id);
+  if(!item) return res.status(404).json({message:'Notification not found'});
+  item.read_at=now(); queuePersist(); res.json(item);
+});
+
 
 app.use((error:any,_req:express.Request,res:express.Response,_next:express.NextFunction)=>{
   console.error(error);
@@ -659,3 +864,6 @@ const persisted=await loadState<PersistedState>();
 if(persisted) restoreState(persisted);
 else { await seed(); await saveState(snapshotState()); }
 server.listen(port,'0.0.0.0',()=>console.log(`TeamPulse API listening on :${port} [db=${persistenceMode}, redis=${cacheMode}]`));
+const automationIntervalMs=Math.max(3600000,Number(process.env.AUTOMATION_INTERVAL_MS??3600000));
+setInterval(()=>{void runAllAutomations().catch(error=>console.error('automation run failed',error));},automationIntervalMs);
+setTimeout(()=>{void runAllAutomations().catch(error=>console.error('initial automation run failed',error));},15000);
