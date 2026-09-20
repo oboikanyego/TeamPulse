@@ -19,6 +19,8 @@ import {
   taskPatchSchema,
   taskSchema,
   taskSprintSchema,
+  timeEntrySchema,
+  capacitySchema,
   workspaceSchema
 } from './validation.js';
 
@@ -32,6 +34,8 @@ type Project = { id:string; workspace_id:string; name:string; description:string
 type Sprint = { id:string; workspace_id:string; name:string; goal:string; status:'Planned'|'Active'|'Completed'; start_date:string|null; end_date:string|null; created_at:string };
 type Task = { id:string; project_id:string; sprint_id:string|null; title:string; description:string; type:string; status:string; priority:string; assignee_id:string|null; reporter_id:string|null; story_points:number|null; due_date:string|null; labels:string[]; updated_at:string };
 type Comment = { id:string; task_id:string; user_id:string; body:string; created_at:string };
+type TimeEntry = { id:string; task_id:string; user_id:string; minutes:number; note:string; spent_at:string; created_at:string };
+type Capacity = { workspace_id:string; user_id:string; weekly_minutes:number };
 type Activity = { id:string; workspace_id:string; actor_id:string|null; entity_type:string; entity_id:string|null; action:string; metadata:Record<string,unknown>; created_at:string };
 type Notification = { id:string; user_id:string; message:string; read_at:string|null };
 
@@ -42,6 +46,8 @@ const projects:Project[] = [];
 const sprints:Sprint[] = [];
 const tasks:Task[] = [];
 const comments:Comment[] = [];
+const timeEntries:TimeEntry[] = [];
+const capacities:Capacity[] = [];
 const activities:Activity[] = [];
 const notifications:Notification[] = [];
 
@@ -92,6 +98,11 @@ async function seed() {
     {workspace_id:workspace.id,user_id:manager.id,role:'manager'},
     {workspace_id:workspace.id,user_id:developer.id,role:'member'}
   );
+  capacities.push(
+    {workspace_id:workspace.id,user_id:admin.id,weekly_minutes:1200},
+    {workspace_id:workspace.id,user_id:manager.id,weekly_minutes:1500},
+    {workspace_id:workspace.id,user_id:developer.id,weekly_minutes:1800}
+  );
   const project:Project={id:randomUUID(),workspace_id:workspace.id,name:'Claims Platform',description:'Modernise claims intake and communications.',status:'Active',priority:'High',owner_id:manager.id};
   projects.push(project);
   const activeSprint:Sprint={id:randomUUID(),workspace_id:workspace.id,name:'Sprint 12',goal:'Stabilise mailbox intake and finish the delivery dashboard.',status:'Active',start_date:'2026-09-14',end_date:'2026-09-25',created_at:now()};
@@ -112,6 +123,11 @@ async function seed() {
   logActivity(workspace.id,admin.id,'project',project.id,'created project',{name:project.name});
   const firstTask = tasks[0]!;
   logActivity(workspace.id,manager.id,'task',firstTask.id,'moved task',{title:firstTask.title,status:'In Progress'});
+  timeEntries.push(
+    {id:randomUUID(),task_id:firstTask.id,user_id:developer.id,minutes:210,note:'Implemented webhook validation and initial event handling.',spent_at:'2026-09-16',created_at:now()},
+    {id:randomUUID(),task_id:tasks[1]!.id,user_id:manager.id,minutes:120,note:'Reviewed lifecycle edge cases.',spent_at:'2026-09-17',created_at:now()},
+    {id:randomUUID(),task_id:tasks[3]!.id,user_id:developer.id,minutes:150,note:'Dashboard polish and responsive fixes.',spent_at:'2026-09-18',created_at:now()}
+  );
   notifications.push({id:randomUUID(),user_id:developer.id,message:'You were assigned Graph notifications',read_at:null});
 }
 
@@ -341,6 +357,88 @@ app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
   logActivity(workspaceId,req.user!.id,'task',task.id,'updated task',{title:task.title,status:task.status});
   const payload={...task,assignee_name:users.find(u=>u.id===task.assignee_id)?.name??null,reporter_name:users.find(u=>u.id===task.reporter_id)?.name??null};
   io.to(`workspace:${workspaceId}`).emit('task.updated',payload); res.json(payload);
+});
+
+
+app.get('/api/tasks/:taskId/time',(req:AuthedRequest,res)=>{
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
+  if(!task) return res.status(404).json({message:'Task not found'});
+  const workspaceId=taskWorkspace(task)!;
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  res.json(timeEntries.filter(e=>e.task_id===task.id).map(e=>({
+    ...e,
+    user_name:users.find(u=>u.id===e.user_id)?.name??'Unknown'
+  })));
+});
+
+app.post('/api/tasks/:taskId/time',(req:AuthedRequest,res)=>{
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
+  if(!task) return res.status(404).json({message:'Task not found'});
+  const workspaceId=taskWorkspace(task)!;
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const body=timeEntrySchema.parse(req.body);
+  const entry:TimeEntry={
+    id:randomUUID(),task_id:task.id,user_id:req.user!.id,minutes:body.minutes,
+    note:body.note??'',spent_at:body.spentAt??now().slice(0,10),created_at:now()
+  };
+  timeEntries.unshift(entry);
+  logActivity(workspaceId,req.user!.id,'time_entry',entry.id,'logged time',{task:task.title,minutes:entry.minutes});
+  io.to(`workspace:${workspaceId}`).emit('time.logged',{...entry,user_name:req.user!.name});
+  res.status(201).json({...entry,user_name:req.user!.name});
+});
+
+app.patch('/api/workspaces/:workspaceId/capacity/:userId',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  const userId=routeParam(req.params.userId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  if(!memberships.some(m=>m.workspace_id===workspaceId&&m.user_id===userId)) return res.status(404).json({message:'Member not found'});
+  const body=capacitySchema.parse(req.body);
+  const current=capacities.find(c=>c.workspace_id===workspaceId&&c.user_id===userId);
+  if(current) current.weekly_minutes=body.weeklyMinutes; else capacities.push({workspace_id:workspaceId,user_id:userId,weekly_minutes:body.weeklyMinutes});
+  logActivity(workspaceId,req.user!.id,'capacity',userId,'updated capacity',{weeklyMinutes:body.weeklyMinutes});
+  res.json({user_id:userId,weekly_minutes:body.weeklyMinutes});
+});
+
+app.get('/api/workspaces/:workspaceId/analytics',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const projectIds=new Set(projects.filter(p=>p.workspace_id===workspaceId).map(p=>p.id));
+  const workspaceTasks=tasks.filter(t=>projectIds.has(t.project_id));
+  const sprintRows=sprints.filter(s=>s.workspace_id===workspaceId).map(s=>{
+    const sprintTasks=workspaceTasks.filter(t=>t.sprint_id===s.id);
+    const completed=sprintTasks.filter(t=>t.status==='Done');
+    const plannedPoints=sprintTasks.reduce((sum,t)=>sum+(t.story_points??0),0);
+    const deliveredPoints=completed.reduce((sum,t)=>sum+(t.story_points??0),0);
+    const loggedMinutes=timeEntries.filter(e=>sprintTasks.some(t=>t.id===e.task_id)).reduce((sum,e)=>sum+e.minutes,0);
+    const start=s.start_date?new Date(s.start_date):null;
+    const end=s.end_date?new Date(s.end_date):null;
+    const totalDays=start&&end?Math.max(1,Math.ceil((end.getTime()-start.getTime())/86400000)+1):0;
+    const elapsed=start?Math.max(1,Math.min(totalDays||1,Math.ceil((Date.now()-start.getTime())/86400000)+1)):0;
+    const idealRemaining=plannedPoints&&totalDays?Math.max(0,Math.round(plannedPoints*(1-elapsed/totalDays))):0;
+    const actualRemaining=Math.max(0,plannedPoints-deliveredPoints);
+    return {...s,planned_points:plannedPoints,delivered_points:deliveredPoints,logged_minutes:loggedMinutes,ideal_remaining:idealRemaining,actual_remaining:actualRemaining};
+  });
+
+  const memberRows=memberships.filter(m=>m.workspace_id===workspaceId).map(m=>{
+    const user=users.find(u=>u.id===m.user_id)!;
+    const memberTasks=workspaceTasks.filter(t=>t.assignee_id===user.id&&t.status!=='Done');
+    const memberEntries=timeEntries.filter(e=>e.user_id===user.id&&workspaceTasks.some(t=>t.id===e.task_id));
+    const weeklyMinutes=capacities.find(c=>c.workspace_id===workspaceId&&c.user_id===user.id)?.weekly_minutes??1800;
+    const loggedMinutes=memberEntries.reduce((sum,e)=>sum+e.minutes,0);
+    const plannedPoints=memberTasks.reduce((sum,t)=>sum+(t.story_points??0),0);
+    return {id:user.id,name:user.name,role:m.role,weekly_minutes:weeklyMinutes,logged_minutes:loggedMinutes,active_tasks:memberTasks.length,planned_points:plannedPoints,utilization:Math.min(100,Math.round((loggedMinutes/weeklyMinutes)*100))};
+  });
+
+  const completed=workspaceTasks.filter(t=>t.status==='Done');
+  const avgCycleHours=completed.length?Math.round(completed.reduce((sum,t)=>sum+Math.max(1,(Date.now()-new Date(t.updated_at).getTime())/3600000),0)/completed.length):0;
+  const totalLogged=timeEntries.filter(e=>workspaceTasks.some(t=>t.id===e.task_id)).reduce((sum,e)=>sum+e.minutes,0);
+
+  res.json({
+    summary:{total_logged_minutes:totalLogged,completed_tasks:completed.length,average_cycle_hours:avgCycleHours,active_sprint:sprintRows.find(s=>s.status==='Active')?.name??null},
+    velocity:sprintRows.filter(s=>s.status==='Completed'||s.status==='Active').map(s=>({sprint:s.name,planned:s.planned_points,delivered:s.delivered_points})),
+    sprints:sprintRows,
+    capacity:memberRows
+  });
 });
 
 app.get('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{

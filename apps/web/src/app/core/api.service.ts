@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Activity, Comment, Dashboard, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, Workspace } from '../models';
+import type { Activity, Comment, Dashboard, DeliveryAnalytics, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TimeEntry, Workspace } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -104,6 +104,22 @@ export class ApiService {
 
   assignTaskToSprint(taskId: string, sprintId: string | null) {
     return this.http.patch<Task>(`${this.base}/tasks/${taskId}/sprint`, { sprintId });
+  }
+
+  timeEntries(taskId: string) {
+    return this.http.get<TimeEntry[]>(`${this.base}/tasks/${taskId}/time`);
+  }
+
+  logTime(taskId: string, body: { minutes: number; note: string; spentAt: string | null }) {
+    return this.http.post<TimeEntry>(`${this.base}/tasks/${taskId}/time`, body);
+  }
+
+  analytics(workspaceId: string) {
+    return this.http.get<DeliveryAnalytics>(`${this.base}/workspaces/${workspaceId}/analytics`);
+  }
+
+  updateCapacity(workspaceId: string, userId: string, weeklyMinutes: number) {
+    return this.http.patch<{user_id:string;weekly_minutes:number}>(`${this.base}/workspaces/${workspaceId}/capacity/${userId}`, { weeklyMinutes });
   }
 
   notifications() {

@@ -116,3 +116,42 @@ export interface PlanningBoard {
   sprints: Sprint[];
   backlog: Array<Task & { project_name: string }>;
 }
+
+
+export interface TimeEntry {
+  id: string;
+  task_id: string;
+  user_id: string;
+  user_name: string;
+  minutes: number;
+  note: string;
+  spent_at: string;
+  created_at: string;
+}
+
+export interface DeliveryAnalytics {
+  summary: {
+    total_logged_minutes: number;
+    completed_tasks: number;
+    average_cycle_hours: number;
+    active_sprint: string | null;
+  };
+  velocity: Array<{ sprint: string; planned: number; delivered: number }>;
+  sprints: Array<Sprint & {
+    planned_points: number;
+    delivered_points: number;
+    logged_minutes: number;
+    ideal_remaining: number;
+    actual_remaining: number;
+  }>;
+  capacity: Array<{
+    id: string;
+    name: string;
+    role: string;
+    weekly_minutes: number;
+    logged_minutes: number;
+    active_tasks: number;
+    planned_points: number;
+    utilization: number;
+  }>;
+}
