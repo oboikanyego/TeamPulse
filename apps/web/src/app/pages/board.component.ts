@@ -6,7 +6,7 @@ import { switchMap } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { SocketService } from '../core/socket.service';
 import { WorkspaceStore } from '../core/workspace.store';
-import type { Comment, Member, Task, TaskStatus } from '../models';
+import type { Comment, Member, Task, TaskStatus, TimeEntry } from '../models';
 
 @Component({
   standalone: true,
@@ -86,6 +86,21 @@ import type { Comment, Member, Task, TaskStatus } from '../models';
             <div><span>Story points</span><strong>{{ task.story_points || '—' }}</strong></div>
             <div><span>Due</span><strong>{{ task.due_date ? (task.due_date | date:'MMM d, y') : '—' }}</strong></div>
           </div>
+          <div class="time-section">
+            <div class="panel-head"><div><p class="eyebrow">TIME TRACKING</p><h3>Work log</h3></div><strong>{{totalLoggedHours()}}h</strong></div>
+            <div class="time-entry-form">
+              <label>Minutes<input [(ngModel)]="timeMinutes" type="number" min="1" max="1440" placeholder="60"></label>
+              <label>Work date<input [(ngModel)]="timeDate" type="date"></label>
+              <label class="time-note">Note<input [(ngModel)]="timeNote" placeholder="What did you work on?"></label>
+              <button class="btn secondary" (click)="logTime()">Log time</button>
+            </div>
+            <div class="time-list">
+              @for (entry of timeEntries(); track entry.id) {
+                <div class="time-row"><div><strong>{{ entry.user_name }}</strong><small>{{ entry.spent_at | date:'MMM d, y' }}</small></div><p>{{ entry.note || 'Work logged' }}</p><b>{{ entry.minutes }}m</b></div>
+              } @empty { <p class="empty">No time logged yet.</p> }
+            </div>
+          </div>
+
           <div class="comment-section">
             <div class="panel-head"><div><p class="eyebrow">DISCUSSION</p><h3>Comments</h3></div></div>
             <div class="comments">
@@ -112,11 +127,15 @@ export class BoardComponent {
   readonly taskModal = signal(false);
   readonly selectedTask = signal<Task | null>(null);
   readonly comments = signal<Comment[]>([]);
+  readonly timeEntries = signal<TimeEntry[]>([]);
   readonly priorityFilter = signal('All');
   readonly projectName = signal('Project');
   private readonly dragged = signal<Task | null>(null);
   private projectId = '';
   commentBody = '';
+  timeMinutes: number | null = 60;
+  timeDate = new Date().toISOString().slice(0,10);
+  timeNote = '';
   newTask: {
     title: string; description: string; type: string; priority: string;
     storyPoints: number | null; assigneeId: string | null; dueDate: string | null;
@@ -173,6 +192,7 @@ export class BoardComponent {
   openTask(task: Task): void {
     this.selectedTask.set(task);
     this.api.comments(task.id).subscribe((comments) => this.comments.set(comments));
+    this.api.timeEntries(task.id).subscribe((entries) => this.timeEntries.set(entries));
   }
 
   createTask(): void {
@@ -191,6 +211,20 @@ export class BoardComponent {
       this.upsert(task);
       this.taskModal.set(false);
       this.newTask = { title: '', description: '', type: 'Task', priority: 'Medium', storyPoints: null, assigneeId: null, dueDate: null };
+    });
+  }
+
+  totalLoggedHours(): number {
+    return Math.round((this.timeEntries().reduce((sum,entry)=>sum+entry.minutes,0)/60)*10)/10;
+  }
+
+  logTime(): void {
+    const task=this.selectedTask();
+    if(!task || !this.timeMinutes || this.timeMinutes<1) return;
+    this.api.logTime(task.id,{minutes:this.timeMinutes,note:this.timeNote.trim(),spentAt:this.timeDate||null}).subscribe((entry)=>{
+      this.timeEntries.update(items=>[entry,...items]);
+      this.timeMinutes=60;
+      this.timeNote='';
     });
   }
 
