@@ -54,3 +54,18 @@ Workspace preferences determine whether assignment, blocker, overdue, sprint, CI
 Automation executes on an hourly server interval and can also be invoked by an admin or manager through the API. Deduplication records prevent the same blocker state, overdue due-date, GitHub Actions run or daily digest from generating repeated alerts. CI checks reuse connected GitHub repositories and inspect recent workflow runs.
 
 On infrastructure that sleeps when idle, interval execution is best-effort. A future production upgrade can move the same automation function behind a durable scheduler/worker without changing notification semantics.
+
+
+## Governance and SaaS boundary
+
+Authorization uses workspace membership plus an explicit permission matrix. The `viewer` role has no write permissions. Audit entries are generated from the existing activity stream and are available only to roles with `audit.view`.
+
+Workspace onboarding and invitation state are part of the persisted application state. Billing metadata is intentionally provider-neutral so a future Stripe/Paystack integration can be added without changing workspace ownership or seat semantics.
+
+## Reporting and Metabase
+
+Operational screens remain Angular-native. BI/reporting uses a separate read model in PostgreSQL. Each state persistence cycle synchronizes relational `bi_*` tables and a `bi_workspace_summary` view. This keeps Metabase queries simple and avoids coupling BI to the JSON application-state envelope.
+
+Metabase guest embedding is signed by the API. The server injects `workspace_id` as a locked JWT parameter; the browser never receives the Metabase signing secret. The UI requests a short-lived signed embed URL and uses native reports when Metabase is unavailable.
+
+For production, Metabase should use its own application database for Metabase metadata. TeamPulse PostgreSQL is added to Metabase separately as a read-only analytics data source.
