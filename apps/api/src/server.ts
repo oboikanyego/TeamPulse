@@ -18,6 +18,10 @@ import {
   notificationPreferencesSchema,
   slackIntegrationSchema,
   automationRunSchema,
+  assistantSchema,
+  invitationSchema,
+  roleUpdateSchema,
+  workspaceSettingsSchema,
   memberSchema,
   projectSchema,
   registerSchema,
@@ -50,6 +54,9 @@ type Notification = { id:string; user_id:string; workspace_id?:string|null; kind
 type NotificationPreferences = { workspace_id:string; task_assigned:boolean; task_blocked:boolean; task_overdue:boolean; sprint_changed:boolean; ci_failed:boolean; daily_digest:boolean; slack_enabled:boolean };
 type SlackIntegration = { workspace_id:string; webhook_url:string|null; channel_name:string|null; enabled:boolean; updated_at:string };
 type AutomationEvent = { id:string; workspace_id:string; key:string; kind:string; message:string; created_at:string };
+type Invitation = { id:string; workspace_id:string; email:string; role:Role; token:string; status:'pending'|'accepted'|'revoked'; invited_by:string; created_at:string; accepted_at:string|null };
+type WorkspaceSettings = { workspace_id:string; timezone:string; week_starts_on:'monday'|'sunday'; updated_at:string };
+type WorkspacePlan = { workspace_id:string; plan:'free'|'team'|'business'; seats:number; status:'active'|'trial'; trial_ends_at:string|null; updated_at:string };
 
 const users:User[] = [];
 const workspaces:Workspace[] = [];
@@ -67,16 +74,20 @@ const notifications:Notification[] = [];
 const notificationPreferences:NotificationPreferences[] = [];
 const slackIntegrations:SlackIntegration[] = [];
 const automationEvents:AutomationEvent[] = [];
+const invitations:Invitation[] = [];
+const workspaceSettings:WorkspaceSettings[] = [];
+const workspacePlans:WorkspacePlan[] = [];
 
 type PersistedState = {
   users:User[]; workspaces:Workspace[]; memberships:Membership[]; projects:Project[]; sprints:Sprint[];
   tasks:Task[]; comments:Comment[]; timeEntries:TimeEntry[]; capacities:Capacity[];
   githubRepositories:GitHubRepository[]; githubTaskLinks:GitHubTaskLink[]; activities:Activity[]; notifications:Notification[];
   notificationPreferences?:NotificationPreferences[]; slackIntegrations?:SlackIntegration[]; automationEvents?:AutomationEvent[];
+  invitations?:Invitation[]; workspaceSettings?:WorkspaceSettings[]; workspacePlans?:WorkspacePlan[];
 };
 
 function snapshotState():PersistedState {
-  return {users,workspaces,memberships,projects,sprints,tasks,comments,timeEntries,capacities,githubRepositories,githubTaskLinks,activities,notifications,notificationPreferences,slackIntegrations,automationEvents};
+  return {users,workspaces,memberships,projects,sprints,tasks,comments,timeEntries,capacities,githubRepositories,githubTaskLinks,activities,notifications,notificationPreferences,slackIntegrations,automationEvents,invitations,workspaceSettings,workspacePlans};
 }
 
 function restoreState(state:PersistedState):void {
@@ -96,6 +107,9 @@ function restoreState(state:PersistedState):void {
   notificationPreferences.splice(0,notificationPreferences.length,...(state.notificationPreferences??[]));
   slackIntegrations.splice(0,slackIntegrations.length,...(state.slackIntegrations??[]));
   automationEvents.splice(0,automationEvents.length,...(state.automationEvents??[]));
+  invitations.splice(0,invitations.length,...(state.invitations??[]));
+  workspaceSettings.splice(0,workspaceSettings.length,...(state.workspaceSettings??[]));
+  workspacePlans.splice(0,workspacePlans.length,...(state.workspacePlans??[]));
 }
 
 let persistQueued=false;
@@ -129,6 +143,35 @@ function requireWorkspace(req:AuthedRequest,res:Response,workspaceId:string,role
   if (roles && !roles.includes(role)) { res.status(403).json({message:'Insufficient role'}); return null; }
   return role;
 }
+
+type Permission = 'workspace.manage'|'member.manage'|'project.manage'|'task.write'|'sprint.manage'|'report.export'|'integration.manage'|'audit.view'|'billing.view';
+const rolePermissions:Record<Role,Permission[]>={
+  admin:['workspace.manage','member.manage','project.manage','task.write','sprint.manage','report.export','integration.manage','audit.view','billing.view'],
+  manager:['project.manage','task.write','sprint.manage','report.export','audit.view','billing.view'],
+  member:['task.write'],
+  viewer:[]
+};
+function hasPermission(userId:string,workspaceId:string,permission:Permission):boolean {
+  const role=workspaceRole(userId,workspaceId);
+  return !!role && rolePermissions[role].includes(permission);
+}
+function requirePermission(req:AuthedRequest,res:Response,workspaceId:string,permission:Permission){
+  const role=requireWorkspace(req,res,workspaceId);
+  if(!role) return null;
+  if(!req.user || !hasPermission(req.user.id,workspaceId,permission)){res.status(403).json({message:'Permission denied',permission});return null;}
+  return role;
+}
+function settingsFor(workspaceId:string):WorkspaceSettings {
+  let item=workspaceSettings.find(s=>s.workspace_id===workspaceId);
+  if(!item){item={workspace_id:workspaceId,timezone:'Africa/Johannesburg',week_starts_on:'monday',updated_at:now()};workspaceSettings.push(item);}
+  return item;
+}
+function planFor(workspaceId:string):WorkspacePlan {
+  let item=workspacePlans.find(p=>p.workspace_id===workspaceId);
+  if(!item){item={workspace_id:workspaceId,plan:'free',seats:5,status:'trial',trial_ends_at:new Date(Date.now()+14*86400000).toISOString(),updated_at:now()};workspacePlans.push(item);}
+  return item;
+}
+
 function taskWorkspace(task:Task) {
   return projects.find(p=>p.id===task.project_id)?.workspace_id ?? null;
 }
@@ -332,6 +375,8 @@ async function seed() {
   );
   notifications.push({id:randomUUID(),user_id:developer.id,workspace_id:workspace.id,kind:'task_assigned',message:'You were assigned Graph notifications',read_at:null,created_at:now()});
   preferencesFor(workspace.id);
+  settingsFor(workspace.id);
+  planFor(workspace.id);
 }
 
 io.use((socket,next)=>{
@@ -793,6 +838,118 @@ app.get('/api/workspaces/:workspaceId/search',(req:AuthedRequest,res)=>{
   res.json(result.slice(0,20));
 });
 
+
+
+app.get('/api/workspaces/:workspaceId/permissions',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  const role=requireWorkspace(req,res,workspaceId); if(!role)return;
+  res.json({role,permissions:rolePermissions[role]});
+});
+
+app.patch('/api/workspaces/:workspaceId/members/:userId/role',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'member.manage'))return;
+  const membership=memberships.find(m=>m.workspace_id===workspaceId&&m.user_id===routeParam(req.params.userId));
+  if(!membership)return res.status(404).json({message:'Member not found'});
+  const body=roleUpdateSchema.parse(req.body);
+  if(membership.user_id===workspaces.find(w=>w.id===workspaceId)?.owner_id&&body.role!=='admin')return res.status(400).json({message:'Workspace owner must remain admin'});
+  const previous=membership.role; membership.role=body.role; queuePersist();
+  logActivity(workspaceId,req.user!.id,'membership',membership.user_id,'changed member role',{from:previous,to:body.role});
+  res.json(membership);
+});
+
+app.get('/api/workspaces/:workspaceId/audit',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'audit.view'))return;
+  const entity=String(req.query.entity??'').trim(); const actor=String(req.query.actor??'').trim();
+  const rows=activities.filter(a=>a.workspace_id===workspaceId)
+    .filter(a=>!entity||a.entity_type===entity).filter(a=>!actor||a.actor_id===actor)
+    .slice(0,500).map(a=>({...a,actor_name:users.find(u=>u.id===a.actor_id)?.name??'System'}));
+  res.json(rows);
+});
+
+app.get('/api/workspaces/:workspaceId/reports/executive',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
+  const list=workspaceTasks(workspaceId); const active=sprints.find(s=>s.workspace_id===workspaceId&&s.status==='Active');
+  const done=list.filter(t=>t.status==='Done'); const blocked=list.filter(t=>t.status==='Blocked');
+  const overdue=list.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<Date.now());
+  const points=list.reduce((s,t)=>s+(t.story_points??0),0); const delivered=done.reduce((s,t)=>s+(t.story_points??0),0);
+  const minutes=timeEntries.filter(e=>list.some(t=>t.id===e.task_id)).reduce((s,e)=>s+e.minutes,0);
+  const byPriority=['Critical','High','Medium','Low'].map(priority=>({priority,count:list.filter(t=>t.priority===priority&&t.status!=='Done').length}));
+  const byStatus=['Backlog','To Do','In Progress','Blocked','Review','Done'].map(status=>({status,count:list.filter(t=>t.status===status).length}));
+  res.json({generated_at:now(),summary:{total_tasks:list.length,completed_tasks:done.length,blocked_tasks:blocked.length,overdue_tasks:overdue.length,planned_points:points,delivered_points:delivered,delivery_rate:points?Math.round(delivered/points*100):0,logged_hours:Math.round(minutes/60),active_sprint:active?.name??null},by_priority:byPriority,by_status:byStatus,risks:[...blocked,...overdue].slice(0,10).map(t=>({id:t.id,title:t.title,status:t.status,priority:t.priority,due_date:t.due_date}))});
+});
+
+app.get('/api/workspaces/:workspaceId/reports/export.csv',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'report.export'))return;
+  const escape=(v:unknown)=>'"'+String(v??'').replaceAll('"','""')+'"';
+  const rows=[['Task','Status','Priority','Assignee','Sprint','Story points','Due date'],
+    ...workspaceTasks(workspaceId).map(t=>[t.title,t.status,t.priority,users.find(u=>u.id===t.assignee_id)?.name??'',sprints.find(s=>s.id===t.sprint_id)?.name??'',t.story_points??'',t.due_date??''])];
+  res.type('text/csv').send(rows.map(r=>r.map(escape).join(',')).join('\n'));
+});
+
+app.post('/api/workspaces/:workspaceId/assistant',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
+  const body=assistantSchema.parse(req.body??{}); const list=workspaceTasks(workspaceId);
+  const blocked=list.filter(t=>t.status==='Blocked'); const overdue=list.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<Date.now());
+  const unassigned=list.filter(t=>!t.assignee_id&&t.status!=='Done'); const review=list.filter(t=>t.status==='Review');
+  const active=sprints.find(s=>s.workspace_id===workspaceId&&s.status==='Active');
+  const insights:string[]=[];
+  if(blocked.length)insights.push(`${blocked.length} blocked task(s) need attention: ${blocked.slice(0,3).map(t=>t.title).join(', ')}.`);
+  if(overdue.length)insights.push(`${overdue.length} task(s) are overdue.`);
+  if(review.length)insights.push(`${review.length} task(s) are waiting in review.`);
+  if(unassigned.length)insights.push(`${unassigned.length} active task(s) are unassigned.`);
+  if(!insights.length)insights.push('No immediate delivery risks are visible in the current workspace data.');
+  const recommendations=[
+    ...(blocked.length?['Resolve or re-scope blocked work before pulling additional tasks.']:[]),
+    ...(overdue.length?['Reconfirm owners and dates for overdue work.']:[]),
+    ...(review.length?['Clear the review queue to improve flow.']:[]),
+    ...(active?[`Keep ${active.name} focused on its current goal: ${active.goal||'deliver committed work'}.`]:[])
+  ];
+  res.json({generated_at:now(),focus:body.focus,question:body.question,mode:'deterministic-delivery-assistant',summary:insights.join(' '),insights,recommendations,metrics:{total:list.length,blocked:blocked.length,overdue:overdue.length,in_review:review.length,unassigned:unassigned.length}});
+});
+
+app.get('/api/workspaces/:workspaceId/onboarding',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
+  const steps=[
+    {key:'workspace',label:'Workspace created',complete:!!workspaces.find(w=>w.id===workspaceId)},
+    {key:'team',label:'Add a teammate',complete:memberships.filter(m=>m.workspace_id===workspaceId).length>1},
+    {key:'project',label:'Create a project',complete:projects.some(p=>p.workspace_id===workspaceId)},
+    {key:'task',label:'Create delivery work',complete:workspaceTasks(workspaceId).length>0},
+    {key:'integration',label:'Connect GitHub or Slack',complete:githubRepositories.some(r=>r.workspace_id===workspaceId)||slackIntegrations.some(s=>s.workspace_id===workspaceId&&s.enabled)}
+  ];
+  res.json({steps,completed:steps.filter(s=>s.complete).length,total:steps.length,percent:Math.round(steps.filter(s=>s.complete).length/steps.length*100)});
+});
+
+app.post('/api/workspaces/:workspaceId/invitations',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'member.manage'))return;
+  const body=invitationSchema.parse(req.body);
+  const invitation:Invitation={id:randomUUID(),workspace_id:workspaceId,email:body.email,role:body.role,token:randomUUID(),status:'pending',invited_by:req.user!.id,created_at:now(),accepted_at:null};
+  invitations.unshift(invitation); queuePersist(); logActivity(workspaceId,req.user!.id,'invitation',invitation.id,'invited member',{email:body.email,role:body.role});
+  res.status(201).json({...invitation,token:undefined});
+});
+
+app.get('/api/workspaces/:workspaceId/invitations',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'member.manage'))return;
+  res.json(invitations.filter(i=>i.workspace_id===workspaceId).map(i=>({...i,token:undefined})));
+});
+
+app.get('/api/workspaces/:workspaceId/settings',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
+  const workspace=workspaces.find(w=>w.id===workspaceId)!; res.json({workspace,settings:settingsFor(workspaceId),plan:planFor(workspaceId)});
+});
+
+app.patch('/api/workspaces/:workspaceId/settings',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'workspace.manage'))return;
+  const body=workspaceSettingsSchema.parse(req.body); const workspace=workspaces.find(w=>w.id===workspaceId); if(!workspace)return res.status(404).json({message:'Workspace not found'});
+  workspace.name=body.name; workspace.description=body.description; const settings=settingsFor(workspaceId); settings.timezone=body.timezone;settings.week_starts_on=body.weekStartsOn;settings.updated_at=now();
+  queuePersist(); logActivity(workspaceId,req.user!.id,'workspace',workspaceId,'updated workspace settings',{timezone:body.timezone,weekStartsOn:body.weekStartsOn});
+  res.json({workspace,settings,plan:planFor(workspaceId)});
+});
+
+app.get('/api/workspaces/:workspaceId/billing',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
+  const plan=planFor(workspaceId); const used=memberships.filter(m=>m.workspace_id===workspaceId).length;
+  res.json({...plan,seats_used:used,features:{audit:true,exports:true,assistant:true,slack:true,github:true},checkout_enabled:false});
+});
 
 app.get('/api/workspaces/:workspaceId/notification-settings',(req:AuthedRequest,res)=>{
   const workspaceId=routeParam(req.params.workspaceId);
