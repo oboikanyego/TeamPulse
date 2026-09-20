@@ -23,9 +23,9 @@ PostgreSQL     Redis
 
 ## V1 boundaries
 
-Included: auth, RBAC, workspaces, members, projects, kanban tasks, sprint planning/lifecycle, task time tracking, delivery analytics, capacity reporting, GitHub repository integration, PR/task links, CI engineering insights, comments, activity, notifications, dashboard, realtime updates, Swagger/OpenAPI docs, demo seed, CI and deployment.
+Included: auth, RBAC, workspaces, members, projects, kanban tasks, sprint planning/lifecycle, task time tracking, delivery analytics, capacity reporting, GitHub repository integration, PR/task links, CI engineering insights, workspace notification preferences, Slack incoming-webhook delivery, automated blocker/overdue/CI checks, daily digests, comments, activity, in-app notifications, dashboard, realtime updates, Swagger/OpenAPI docs, demo seed, CI and deployment.
 
-Deferred: billing, email delivery, Slack integration and AI features.
+Deferred: billing, email delivery and AI features.
 
 
 ## API documentation
@@ -45,3 +45,12 @@ Production persistence is provided through a managed PostgreSQL state store when
 Redis is optional and used as a cache adapter when `REDIS_URL` is configured. Keys are namespaced with `teampulse:` to avoid collisions when sharing a Redis instance. GitHub engineering insights use a short-lived cache to reduce external API calls.
 
 The embedded PGlite runtime has been removed from the production API dependency graph to avoid memory pressure on the free Render service.
+
+
+## Notifications and automation
+
+Workspace preferences determine whether assignment, blocker, overdue, sprint, CI-failure and daily-digest events are delivered. In-app notifications are generated per recipient. Slack delivery uses an incoming webhook stored server-side and is never returned to the browser.
+
+Automation executes on an hourly server interval and can also be invoked by an admin or manager through the API. Deduplication records prevent the same blocker state, overdue due-date, GitHub Actions run or daily digest from generating repeated alerts. CI checks reuse connected GitHub repositories and inspect recent workflow runs.
+
+On infrastructure that sleeps when idle, interval execution is best-effort. A future production upgrade can move the same automation function behind a durable scheduler/worker without changing notification semantics.
