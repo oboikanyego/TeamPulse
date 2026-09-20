@@ -971,10 +971,10 @@ app.get('/api/workspaces/:workspaceId/metabase/embed',(req:AuthedRequest,res)=>{
   const metabaseUrl=process.env.METABASE_URL?.replace(/\/$/,'');
   const secret=process.env.METABASE_SECRET_KEY;
   const dashboardId=process.env.METABASE_DASHBOARD_ID;
-  if(!metabaseUrl||!secret||!dashboardId)return res.json({configured:false,url:null});
+  if(!metabaseUrl||!secret||!dashboardId)return res.json({configured:false,edition:'oss',url:null});
   const payload={resource:{dashboard:Number(dashboardId)},params:{workspace_id:[workspaceId]},exp:Math.round(Date.now()/1000)+600};
   const token=jwt.sign(payload,secret);
-  res.json({configured:true,url:`${metabaseUrl}/embed/dashboard/${token}#bordered=false&titled=false`});
+  res.json({configured:true,edition:'oss',url:`${metabaseUrl}/embed/dashboard/${token}#bordered=false&titled=false`});
 });
 
 app.get('/api/workspaces/:workspaceId/notification-settings',(req:AuthedRequest,res)=>{
