@@ -7,6 +7,8 @@ import helmet from 'helmet';
 import { Server } from 'socket.io';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './openapi.js';
+import { cacheMode, cacheReady, cacheGet, cacheSet } from './cache.js';
+import { initPersistence, loadState, persistenceMode, persistenceReady, saveState } from './persistence.js';
 import { authRequired, type AuthedRequest, signToken, verifyToken, type Role } from './auth.js';
 import {
   commentSchema,
@@ -57,6 +59,39 @@ const githubTaskLinks:GitHubTaskLink[] = [];
 const activities:Activity[] = [];
 const notifications:Notification[] = [];
 
+type PersistedState = {
+  users:User[]; workspaces:Workspace[]; memberships:Membership[]; projects:Project[]; sprints:Sprint[];
+  tasks:Task[]; comments:Comment[]; timeEntries:TimeEntry[]; capacities:Capacity[];
+  githubRepositories:GitHubRepository[]; githubTaskLinks:GitHubTaskLink[]; activities:Activity[]; notifications:Notification[];
+};
+
+function snapshotState():PersistedState {
+  return {users,workspaces,memberships,projects,sprints,tasks,comments,timeEntries,capacities,githubRepositories,githubTaskLinks,activities,notifications};
+}
+
+function restoreState(state:PersistedState):void {
+  users.splice(0,users.length,...state.users);
+  workspaces.splice(0,workspaces.length,...state.workspaces);
+  memberships.splice(0,memberships.length,...state.memberships);
+  projects.splice(0,projects.length,...state.projects);
+  sprints.splice(0,sprints.length,...state.sprints);
+  tasks.splice(0,tasks.length,...state.tasks);
+  comments.splice(0,comments.length,...state.comments);
+  timeEntries.splice(0,timeEntries.length,...state.timeEntries);
+  capacities.splice(0,capacities.length,...state.capacities);
+  githubRepositories.splice(0,githubRepositories.length,...state.githubRepositories);
+  githubTaskLinks.splice(0,githubTaskLinks.length,...state.githubTaskLinks);
+  activities.splice(0,activities.length,...state.activities);
+  notifications.splice(0,notifications.length,...state.notifications);
+}
+
+let persistQueued=false;
+function queuePersist():void {
+  if(persistenceMode!=='managed-postgres' || persistQueued) return;
+  persistQueued=true;
+  setTimeout(()=>{persistQueued=false; void saveState(snapshotState()).catch(error=>console.error('state persistence failed',error));},25);
+}
+
 const now = () => new Date().toISOString();
 const routeParam = (value: string | string[] | undefined): string => Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
 const app = express();
@@ -87,6 +122,7 @@ function taskWorkspace(task:Task) {
 function logActivity(workspaceId:string, actorId:string|null, entityType:string, entityId:string|null, action:string, metadata:Record<string,unknown>={}) {
   const item = { id:randomUUID(), workspace_id:workspaceId, actor_id:actorId, entity_type:entityType, entity_id:entityId, action, metadata, created_at:now() };
   activities.unshift(item);
+  queuePersist();
   io.to(`workspace:${workspaceId}`).emit('activity.created', item);
   return item;
 }
@@ -171,7 +207,15 @@ io.on('connection',socket=>{
   socket.on('workspace:leave',(workspaceId:string)=>socket.leave(`workspace:${workspaceId}`));
 });
 
-app.get('/health',(_req,res)=>res.json({status:'ok',database:'memory-fallback',redis:'disabled'}));
+app.get('/health',(_req,res)=>res.json({status:'ok',database:persistenceMode,redis:cacheMode}));
+const readinessHandler=async(_req:express.Request,res:express.Response)=>{
+  const database = await persistenceReady();
+  const redis = cacheMode==='disabled' ? null : await cacheReady();
+  const ready = persistenceMode==='memory-fallback' ? true : database;
+  res.status(ready?200:503).json({status:ready?'ready':'not-ready',database,redis,mode:{database:persistenceMode,redis:cacheMode}});
+};
+app.get('/ready',readinessHandler);
+app.get('/api/system/ready',readinessHandler);
 
 app.post('/api/auth/register',async(req,res)=>{
   const body=registerSchema.parse(req.body);
@@ -179,7 +223,7 @@ app.post('/api/auth/register',async(req,res)=>{
   const user:User={id:randomUUID(),name:body.name,email:body.email,avatar_url:null,password_hash:await bcrypt.hash(body.password,10)};
   users.push(user);
   const workspace:Workspace={id:randomUUID(),name:`${body.name}'s Workspace`,description:'Personal TeamPulse workspace',owner_id:user.id};
-  workspaces.push(workspace); memberships.push({workspace_id:workspace.id,user_id:user.id,role:'admin'});
+  workspaces.push(workspace); memberships.push({workspace_id:workspace.id,user_id:user.id,role:'admin'}); queuePersist();
   res.status(201).json({token:signToken(user),user:{id:user.id,name:user.name,email:user.email,avatar_url:user.avatar_url},workspace});
 });
 
@@ -210,7 +254,7 @@ app.get('/api/workspaces',(req:AuthedRequest,res)=>{
 app.post('/api/workspaces',(req:AuthedRequest,res)=>{
   const body=workspaceSchema.parse(req.body);
   const workspace:Workspace={id:randomUUID(),name:body.name,description:body.description??'',owner_id:req.user!.id};
-  workspaces.push(workspace); memberships.push({workspace_id:workspace.id,user_id:req.user!.id,role:'admin'});
+  workspaces.push(workspace); memberships.push({workspace_id:workspace.id,user_id:req.user!.id,role:'admin'}); queuePersist();
   res.status(201).json({...workspace,role:'admin',project_count:0});
 });
 
@@ -409,6 +453,8 @@ app.post('/api/workspaces/:workspaceId/github/repositories',(req:AuthedRequest,r
 app.get('/api/workspaces/:workspaceId/github/insights',async(req:AuthedRequest,res)=>{
   const workspaceId=routeParam(req.params.workspaceId);
   if(!requireWorkspace(req,res,workspaceId)) return;
+  const cached=await cacheGet<any>(`github-insights:${workspaceId}`);
+  if(cached) return res.json(cached);
   const repos=githubRepositories.filter(r=>r.workspace_id===workspaceId);
   const snapshots:any[]=[];
   for(const repository of repos){
@@ -444,7 +490,7 @@ app.get('/api/workspaces/:workspaceId/github/insights',async(req:AuthedRequest,r
     }
   }
   const healthy=snapshots.filter(s=>!s.error);
-  res.json({
+  const payload={
     summary:{
       repositories:repos.length,
       open_pull_requests:healthy.reduce((sum,s)=>sum+s.open_pull_requests,0),
@@ -452,7 +498,9 @@ app.get('/api/workspaces/:workspaceId/github/insights',async(req:AuthedRequest,r
       median_pr_lead_hours:median(healthy.map(s=>s.median_pr_lead_hours).filter(Boolean))
     },
     repositories:snapshots
-  });
+  };
+  await cacheSet(`github-insights:${workspaceId}`,payload,60);
+  res.json(payload);
 });
 
 app.post('/api/tasks/:taskId/github-link',(req:AuthedRequest,res)=>{
@@ -606,5 +654,8 @@ app.use((error:any,_req:express.Request,res:express.Response,_next:express.NextF
   res.status(message.includes('validation')||message.includes('Invalid')?400:500).json({message});
 });
 
-await seed();
-server.listen(port,'0.0.0.0',()=>console.log(`TeamPulse API listening on :${port}`));
+await initPersistence();
+const persisted=await loadState<PersistedState>();
+if(persisted) restoreState(persisted);
+else { await seed(); await saveState(snapshotState()); }
+server.listen(port,'0.0.0.0',()=>console.log(`TeamPulse API listening on :${port} [db=${persistenceMode}, redis=${cacheMode}]`));

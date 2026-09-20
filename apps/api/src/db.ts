@@ -1,4 +1,3 @@
-import { PGlite } from '@electric-sql/pglite';
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
@@ -11,10 +10,6 @@ const managedPool = databaseUrl
     })
   : null;
 
-const embedded = managedPool
-  ? null
-  : new PGlite(process.env.PGLITE_DATA_DIR || './.teampulse-data');
-
 type DbResult = { rows: any[]; rowCount: number };
 type DbClient = {
   query: (sql: string, params?: unknown[]) => Promise<DbResult>;
@@ -22,32 +17,15 @@ type DbClient = {
 };
 
 async function query(sql: string, params: unknown[] = []): Promise<DbResult> {
-  if (managedPool) {
-    const result = await managedPool.query(sql, params);
-    return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
-  }
-
-  if (!embedded) throw new Error('Database is not initialized');
-
-  if (!params.length && sql.split(';').filter((statement) => statement.trim()).length > 1) {
-    await embedded.exec(sql);
-    return { rows: [], rowCount: 0 };
-  }
-
-  const result = await embedded.query<Record<string, any>>(sql, params);
-  return {
-    rows: result.rows,
-    rowCount: result.rows.length || result.affectedRows || 0
-  };
+  if (!managedPool) throw new Error('DATABASE_URL is required for database operations');
+  const result = await managedPool.query(sql, params);
+  return { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
 }
 
 export const pool = {
   query,
   async connect(): Promise<DbClient> {
-    if (!managedPool) {
-      return { query, release: () => undefined };
-    }
-
+    if (!managedPool) throw new Error('DATABASE_URL is required for database operations');
     const client = await managedPool.connect();
     return {
       async query(sql: string, params: unknown[] = []): Promise<DbResult> {
@@ -59,7 +37,7 @@ export const pool = {
   }
 };
 
-export const databaseMode = managedPool ? 'managed-postgres' : 'embedded-postgres';
+export const databaseMode = managedPool ? 'managed-postgres' : 'unconfigured';
 
 export async function bootstrapDatabase(): Promise<void> {
   await pool.query(`
