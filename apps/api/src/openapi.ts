@@ -12,7 +12,7 @@ export const openApiSpec = {
   tags: [
     { name: 'Auth' }, { name: 'Workspaces' }, { name: 'Projects' }, { name: 'Sprints' },
     { name: 'Tasks' }, { name: 'Team' }, { name: 'Comments' }, { name: 'Dashboard' },
-    { name: 'Search' }, { name: 'Notifications' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }
+    { name: 'Search' }, { name: 'Notifications' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }, { name: 'System' }
   ],
   components: {
     securitySchemes: {
@@ -31,6 +31,7 @@ export const openApiSpec = {
   },
   security: [{ bearerAuth: [] }],
   paths: {
+    '/system/ready': { get:{tags:['System'],security:[],summary:'Readiness check',responses:{'200':{description:'API ready to serve traffic'},'503':{description:'Required persistence dependency unavailable'}}} },
     '/auth/register': {
       post: { tags:['Auth'], security:[], summary:'Register a user and create their first workspace', requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['name','email','password'],properties:{name:{type:'string'},email:{type:'string',format:'email'},password:{type:'string',minLength:8}}}}}}, responses:{'201':{description:'Registered'},'409':{description:'Email already registered'}} }
     },
