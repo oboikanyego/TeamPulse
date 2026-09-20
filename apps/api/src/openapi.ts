@@ -2,7 +2,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'TeamPulse API',
-    version: '3.0.0',
+    version: '4.0.0',
     description: 'REST API for TeamPulse workspaces, projects, delivery planning, tasks, team collaboration and realtime delivery operations.'
   },
   servers: [
@@ -12,7 +12,7 @@ export const openApiSpec = {
   tags: [
     { name: 'Auth' }, { name: 'Workspaces' }, { name: 'Projects' }, { name: 'Sprints' },
     { name: 'Tasks' }, { name: 'Team' }, { name: 'Comments' }, { name: 'Dashboard' },
-    { name: 'Search' }, { name: 'Notifications' }, { name: 'Time Tracking' }, { name: 'Analytics' }
+    { name: 'Search' }, { name: 'Notifications' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }
   ],
   components: {
     securitySchemes: {
@@ -99,6 +99,19 @@ export const openApiSpec = {
     },
     '/workspaces/{workspaceId}/search': {
       get:{tags:['Search'],summary:'Search projects, tasks and members',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}},{name:'q',in:'query',required:true,schema:{type:'string'}}],responses:{'200':{description:'Search results'}}}
+    },
+    '/workspaces/{workspaceId}/github/repositories': {
+      get:{tags:['GitHub'],summary:'List connected GitHub repositories',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Repository list'}}},
+      post:{tags:['GitHub'],summary:'Connect a GitHub repository',description:'Requires admin or manager role.',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['owner','repo'],properties:{owner:{type:'string'},repo:{type:'string'}}}}}},responses:{'201':{description:'Repository connected'}}}
+    },
+    '/workspaces/{workspaceId}/github/insights': {
+      get:{tags:['GitHub'],summary:'Get live pull request, commit and GitHub Actions engineering insights',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Engineering insights'}}}
+    },
+    '/tasks/{taskId}/github-link': {
+      post:{tags:['GitHub','Tasks'],summary:'Link a pull request to a task',parameters:[{name:'taskId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],requestBody:{required:true,content:{'application/json':{schema:{type:'object',required:['owner','repo','pullNumber'],properties:{owner:{type:'string'},repo:{type:'string'},pullNumber:{type:'integer',minimum:1}}}}}},responses:{'201':{description:'Pull request linked'}}}
+    },
+    '/tasks/{taskId}/github-links': {
+      get:{tags:['GitHub','Tasks'],summary:'List GitHub pull requests linked to a task',parameters:[{name:'taskId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Linked pull requests'}}}
     },
     '/notifications': { get:{tags:['Notifications'],summary:'List notifications for the current user',responses:{'200':{description:'Notification list'}}} }
   }
