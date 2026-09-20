@@ -37,7 +37,7 @@ async function query(sql: string, params: unknown[] = []): Promise<DbResult> {
   const result = await embedded.query<Record<string, any>>(sql, params);
   return {
     rows: result.rows,
-    rowCount: result.affectedRows ?? result.rows.length
+    rowCount: result.rows.length || result.affectedRows || 0
   };
 }
 
