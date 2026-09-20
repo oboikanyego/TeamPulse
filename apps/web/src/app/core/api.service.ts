@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Activity, Comment, Dashboard, Member, Project, SearchResult, Task, TaskStatus, Workspace } from '../models';
+import type { Activity, Comment, Dashboard, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, Workspace } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -88,6 +88,22 @@ export class ApiService {
     return this.http.get<SearchResult[]>(`${this.base}/workspaces/${workspaceId}/search`, {
       params: new HttpParams().set('q', q)
     });
+  }
+
+  planning(workspaceId: string) {
+    return this.http.get<PlanningBoard>(`${this.base}/workspaces/${workspaceId}/planning`);
+  }
+
+  createSprint(workspaceId: string, body: { name: string; goal: string; startDate: string | null; endDate: string | null }) {
+    return this.http.post<Sprint>(`${this.base}/workspaces/${workspaceId}/sprints`, body);
+  }
+
+  setSprintStatus(sprintId: string, status: Sprint['status']) {
+    return this.http.patch<Sprint>(`${this.base}/sprints/${sprintId}/status`, { status });
+  }
+
+  assignTaskToSprint(taskId: string, sprintId: string | null) {
+    return this.http.patch<Task>(`${this.base}/tasks/${taskId}/sprint`, { sprintId });
   }
 
   notifications() {
