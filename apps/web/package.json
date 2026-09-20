@@ -1,0 +1,30 @@
+{
+  "name": "@teampulse/web",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.22.3"
+  },
+  "scripts": {
+    "start": "node scripts/set-env.mjs && ng serve",
+    "build": "node scripts/set-env.mjs && ng build",
+    "check": "node scripts/set-env.mjs && ng build --configuration development"
+  },
+  "dependencies": {
+    "@angular/common": "^22.1.7",
+    "@angular/core": "^22.1.7",
+    "@angular/forms": "^22.1.7",
+    "@angular/platform-browser": "^22.1.7",
+    "@angular/router": "^22.1.7",
+    "rxjs": "^7.8.2",
+    "socket.io-client": "^4.8.1",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^22.1.7",
+    "@angular/cli": "^22.1.7",
+    "@angular/compiler": "^22.1.7",
+    "@angular/compiler-cli": "^22.1.7",
+    "typescript": "^6.0.2"
+  }
+}
