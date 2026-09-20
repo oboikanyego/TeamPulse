@@ -72,3 +72,15 @@ export const timeEntrySchema = z.object({
 export const capacitySchema = z.object({
   weeklyMinutes: z.number().int().min(60).max(10080)
 });
+
+
+export const githubRepositorySchema = z.object({
+  owner: z.string().min(1).max(100),
+  repo: z.string().min(1).max(100)
+});
+
+export const githubTaskLinkSchema = z.object({
+  owner: z.string().min(1).max(100),
+  repo: z.string().min(1).max(100),
+  pullNumber: z.number().int().positive()
+});

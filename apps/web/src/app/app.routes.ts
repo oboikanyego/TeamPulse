@@ -6,6 +6,7 @@ import { DashboardComponent } from './pages/dashboard.component';
 import { LoginComponent } from './pages/login.component';
 import { PlanningComponent } from './pages/planning.component';
 import { AnalyticsComponent } from './pages/analytics.component';
+import { EngineeringComponent } from './pages/engineering.component';
 import { RegisterComponent } from './pages/register.component';
 import { TeamComponent } from './pages/team.component';
 
@@ -22,6 +23,7 @@ export const routes: Routes = [
       { path: 'team', component: TeamComponent },
       { path: 'planning', component: PlanningComponent },
       { path: 'analytics', component: AnalyticsComponent },
+      { path: 'engineering', component: EngineeringComponent },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]
   },

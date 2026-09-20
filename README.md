@@ -47,3 +47,10 @@ TeamPulse now supports sprint creation, Planned/Active/Completed lifecycle state
 ## Phase 3 — Time tracking & sprint analytics
 
 TeamPulse now supports task-level work logs, weekly member capacity settings, sprint velocity, planned-vs-delivered story points, active-sprint burndown indicators, logged-time summaries, cycle-time metrics and team utilisation reporting.
+
+
+## Phase 4 — GitHub integration & engineering insights
+
+TeamPulse can now connect GitHub repositories to a workspace, surface live pull requests, recent commits and GitHub Actions runs, calculate CI success and PR lead-time indicators, and link implementation pull requests directly to delivery tasks.
+
+Public repositories work without a token. Set `GITHUB_TOKEN` in the API environment to increase GitHub API limits or access repositories the token is permitted to read.

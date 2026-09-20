@@ -6,7 +6,7 @@ import { switchMap } from 'rxjs';
 import { ApiService } from '../core/api.service';
 import { SocketService } from '../core/socket.service';
 import { WorkspaceStore } from '../core/workspace.store';
-import type { Comment, Member, Task, TaskStatus, TimeEntry } from '../models';
+import type { Comment, GitHubTaskLink, Member, Task, TaskStatus, TimeEntry } from '../models';
 
 @Component({
   standalone: true,
@@ -86,6 +86,24 @@ import type { Comment, Member, Task, TaskStatus, TimeEntry } from '../models';
             <div><span>Story points</span><strong>{{ task.story_points || '—' }}</strong></div>
             <div><span>Due</span><strong>{{ task.due_date ? (task.due_date | date:'MMM d, y') : '—' }}</strong></div>
           </div>
+          <div class="github-task-section">
+            <div class="panel-head"><div><p class="eyebrow">GITHUB</p><h3>Linked pull requests</h3></div></div>
+            <div class="github-link-form">
+              <input [(ngModel)]="githubOwner" placeholder="Owner">
+              <input [(ngModel)]="githubRepo" placeholder="Repository">
+              <input [(ngModel)]="githubPullNumber" type="number" min="1" placeholder="PR #">
+              <button class="btn secondary" (click)="linkPullRequest()">Link PR</button>
+            </div>
+            <div class="github-list">
+              @for (link of githubLinks(); track link.repository + link.pull_number) {
+                <a class="github-row" [href]="link.url" target="_blank" rel="noopener">
+                  <div><strong>{{link.repository}} #{{link.pull_number}} · {{link.title}}</strong><small>{{link.author || 'GitHub'}}</small></div>
+                  <span>{{link.merged ? 'Merged' : link.state}}</span>
+                </a>
+              } @empty { <p class="empty">No pull requests linked yet.</p> }
+            </div>
+          </div>
+
           <div class="time-section">
             <div class="panel-head"><div><p class="eyebrow">TIME TRACKING</p><h3>Work log</h3></div><strong>{{totalLoggedHours()}}h</strong></div>
             <div class="time-entry-form">
@@ -128,6 +146,7 @@ export class BoardComponent {
   readonly selectedTask = signal<Task | null>(null);
   readonly comments = signal<Comment[]>([]);
   readonly timeEntries = signal<TimeEntry[]>([]);
+  readonly githubLinks = signal<GitHubTaskLink[]>([]);
   readonly priorityFilter = signal('All');
   readonly projectName = signal('Project');
   private readonly dragged = signal<Task | null>(null);
@@ -136,6 +155,9 @@ export class BoardComponent {
   timeMinutes: number | null = 60;
   timeDate = new Date().toISOString().slice(0,10);
   timeNote = '';
+  githubOwner = 'oboikanyego';
+  githubRepo = 'TeamPulse';
+  githubPullNumber: number | null = null;
   newTask: {
     title: string; description: string; type: string; priority: string;
     storyPoints: number | null; assigneeId: string | null; dueDate: string | null;
@@ -193,6 +215,7 @@ export class BoardComponent {
     this.selectedTask.set(task);
     this.api.comments(task.id).subscribe((comments) => this.comments.set(comments));
     this.api.timeEntries(task.id).subscribe((entries) => this.timeEntries.set(entries));
+    this.api.githubTaskLinks(task.id).subscribe((links) => this.githubLinks.set(links));
   }
 
   createTask(): void {
@@ -225,6 +248,15 @@ export class BoardComponent {
       this.timeEntries.update(items=>[entry,...items]);
       this.timeMinutes=60;
       this.timeNote='';
+    });
+  }
+
+  linkPullRequest(): void {
+    const task=this.selectedTask();
+    if(!task || !this.githubOwner.trim() || !this.githubRepo.trim() || !this.githubPullNumber) return;
+    this.api.linkGitHubPullRequest(task.id,{owner:this.githubOwner.trim(),repo:this.githubRepo.trim(),pullNumber:this.githubPullNumber}).subscribe(()=>{
+      this.api.githubTaskLinks(task.id).subscribe((links)=>this.githubLinks.set(links));
+      this.githubPullNumber=null;
     });
   }
 

@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Activity, Comment, Dashboard, DeliveryAnalytics, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TimeEntry, Workspace } from '../models';
+import type { Activity, Comment, Dashboard, DeliveryAnalytics, GitHubInsights, GitHubRepository, GitHubTaskLink, Member, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TimeEntry, Workspace } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -120,6 +120,26 @@ export class ApiService {
 
   updateCapacity(workspaceId: string, userId: string, weeklyMinutes: number) {
     return this.http.patch<{user_id:string;weekly_minutes:number}>(`${this.base}/workspaces/${workspaceId}/capacity/${userId}`, { weeklyMinutes });
+  }
+
+  githubRepositories(workspaceId: string) {
+    return this.http.get<GitHubRepository[]>(`${this.base}/workspaces/${workspaceId}/github/repositories`);
+  }
+
+  connectGitHubRepository(workspaceId: string, owner: string, repo: string) {
+    return this.http.post<GitHubRepository>(`${this.base}/workspaces/${workspaceId}/github/repositories`, { owner, repo });
+  }
+
+  githubInsights(workspaceId: string) {
+    return this.http.get<GitHubInsights>(`${this.base}/workspaces/${workspaceId}/github/insights`);
+  }
+
+  githubTaskLinks(taskId: string) {
+    return this.http.get<GitHubTaskLink[]>(`${this.base}/tasks/${taskId}/github-links`);
+  }
+
+  linkGitHubPullRequest(taskId: string, body: { owner:string; repo:string; pullNumber:number }) {
+    return this.http.post<GitHubTaskLink>(`${this.base}/tasks/${taskId}/github-link`, body);
   }
 
   notifications() {
