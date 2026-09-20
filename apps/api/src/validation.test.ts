@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { automationRunSchema, capacitySchema, credentialsSchema, githubRepositorySchema, githubTaskLinkSchema, notificationPreferencesSchema, slackIntegrationSchema, taskSchema, timeEntrySchema } from './validation.js';
+import { assistantSchema, automationRunSchema, capacitySchema, credentialsSchema, githubRepositorySchema, githubTaskLinkSchema, invitationSchema, notificationPreferencesSchema, roleUpdateSchema, slackIntegrationSchema, taskSchema, timeEntrySchema, workspaceSettingsSchema } from './validation.js';
 
 test('credentials normalise email', () => {
   const value = credentialsSchema.parse({ email: 'ADMIN@TeamPulse.Demo', password: 'Demo123!' });
@@ -50,4 +50,25 @@ test('Slack integration accepts Slack incoming webhook URLs only', () => {
 
 test('automation run can request a digest', () => {
   assert.equal(automationRunSchema.parse({ includeDigest: true }).includeDigest, true);
+});
+
+
+test('advanced RBAC includes the read-only viewer role', () => {
+  assert.equal(roleUpdateSchema.parse({ role: 'viewer' }).role, 'viewer');
+});
+
+test('workspace invitation validation normalises email and supports viewer', () => {
+  const value=invitationSchema.parse({email:'VIEWER@Example.com',role:'viewer'});
+  assert.equal(value.email,'viewer@example.com');
+});
+
+test('workspace settings provide SaaS-safe defaults', () => {
+  const value=workspaceSettingsSchema.parse({name:'Engineering',description:''});
+  assert.equal(value.timezone,'Africa/Johannesburg');
+  assert.equal(value.weekStartsOn,'monday');
+});
+
+test('delivery assistant validation bounds the prompt and focus', () => {
+  assert.equal(assistantSchema.parse({focus:'risks',question:'What is blocked?'}).focus,'risks');
+  assert.throws(()=>assistantSchema.parse({focus:'unknown'}));
 });
