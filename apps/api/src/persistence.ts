@@ -23,11 +23,13 @@ const pool = databaseUrl
   ? new Pool({ connectionString: databaseUrl, ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false } })
   : null;
 
-export const persistenceMode = pool ? 'managed-postgres' : 'memory-fallback';
+let persistenceAvailable = !!pool;
+export let persistenceMode: 'managed-postgres' | 'memory-fallback' = pool ? 'managed-postgres' : 'memory-fallback';
 
 export async function initPersistence(): Promise<void> {
-  if (!pool) return;
-  await pool.query(`
+  if (!pool || !persistenceAvailable) return;
+  try {
+    await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
       id TEXT PRIMARY KEY,
       payload JSONB NOT NULL,
@@ -77,10 +79,17 @@ export async function initPersistence(): Promise<void> {
     LEFT JOIN bi_tasks t ON t.project_id=p.id
     GROUP BY p.workspace_id;
   `);
+    persistenceAvailable = true;
+    persistenceMode = 'managed-postgres';
+  } catch (error) {
+    persistenceAvailable = false;
+    persistenceMode = 'memory-fallback';
+    console.error('Postgres unavailable; continuing with memory fallback:', error instanceof Error ? error.message : error);
+  }
 }
 
 export async function loadState<T>(): Promise<T | null> {
-  if (!pool) return null;
+  if (!pool || !persistenceAvailable) return null;
   const result = await pool.query('SELECT payload FROM app_state WHERE id = $1 LIMIT 1', ['primary']);
   return (result.rows[0]?.payload as T | undefined) ?? null;
 }
@@ -153,7 +162,7 @@ export async function saveState(payload: unknown): Promise<void> {
 }
 
 export async function persistenceReady(): Promise<boolean> {
-  if (!pool) return false;
+  if (!pool || !persistenceAvailable) return false;
   try {
     await pool.query('SELECT 1');
     return true;
