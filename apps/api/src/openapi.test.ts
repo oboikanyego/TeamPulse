@@ -15,5 +15,5 @@ test('OpenAPI documents core, planning, analytics and GitHub integration endpoin
   assert.ok(openApiSpec.paths['/workspaces/{workspaceId}/github/insights']);
   assert.ok(openApiSpec.paths['/tasks/{taskId}/github-link']);
   assert.ok(openApiSpec.paths['/tasks/{taskId}/github-links']);
-  assert.ok(openApiSpec.paths['/ready']);
+  assert.ok(openApiSpec.paths['/system/ready']);
 });
