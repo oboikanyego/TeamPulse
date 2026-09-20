@@ -23,9 +23,9 @@ PostgreSQL     Redis
 
 ## V1 boundaries
 
-Included: auth, RBAC, workspaces, members, projects, kanban tasks, sprint planning/lifecycle, comments, activity, notifications, dashboard, realtime updates, Swagger/OpenAPI docs, demo seed, CI and deployment.
+Included: auth, RBAC, workspaces, members, projects, kanban tasks, sprint planning/lifecycle, task time tracking, delivery analytics, capacity reporting, comments, activity, notifications, dashboard, realtime updates, Swagger/OpenAPI docs, demo seed, CI and deployment.
 
-Deferred: billing, email delivery, GitHub/Slack integrations, time tracking and AI features.
+Deferred: billing, email delivery, GitHub/Slack integrations and AI features.
 
 
 ## API documentation
