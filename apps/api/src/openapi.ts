@@ -2,7 +2,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'TeamPulse API',
-    version: '4.0.0',
+    version: '5.0.0',
     description: 'REST API for TeamPulse workspaces, projects, delivery planning, tasks, team collaboration and realtime delivery operations.'
   },
   servers: [
