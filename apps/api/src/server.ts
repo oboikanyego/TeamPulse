@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express, { type Response } from 'express';
 import helmet from 'helmet';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { Server } from 'socket.io';
 import { authRequired, type AuthedRequest, signToken, type Role } from './auth.js';
 import { bootstrapDatabase, pool } from './db.js';
@@ -21,6 +21,10 @@ import {
 const port = Number(process.env.PORT || 8080);
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 
+function param(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? (value[0] ?? '') : (value ?? '');
+}
+
 const app = express();
 app.use(helmet());
 app.use(cors({ origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((v) => v.trim()), credentials: false }));
@@ -34,8 +38,8 @@ const io = new Server(server, {
 let redis: Redis | null = null;
 if (process.env.REDIS_URL) {
   redis = new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
-  redis.on('error', (error) => console.warn('Redis unavailable:', error.message));
-  redis.connect().catch((error) => console.warn('Redis connection skipped:', error.message));
+  redis.on('error', (error: Error) => console.warn('Redis unavailable:', error.message));
+  redis.connect().catch((error: Error) => console.warn('Redis connection skipped:', error.message));
 }
 
 io.on('connection', (socket) => {
@@ -123,7 +127,7 @@ async function requireWorkspace(
   res: Response,
   allowed: Role[] = ['admin', 'manager', 'member']
 ): Promise<Role | null> {
-  const role = await membership(req.user!.id, req.params.workspaceId!);
+  const role = await membership(req.user!.id, param(param(req.params.workspaceId)));
   if (!role) {
     res.status(403).json({ message: 'Workspace access denied' });
     return null;
@@ -218,7 +222,7 @@ app.get('/api/workspaces/:workspaceId/members', async (req: AuthedRequest, res) 
      JOIN users u ON u.id=wm.user_id
      WHERE wm.workspace_id=$1
      ORDER BY CASE wm.role WHEN 'admin' THEN 1 WHEN 'manager' THEN 2 ELSE 3 END,u.name`,
-    [req.params.workspaceId]
+    [param(req.params.workspaceId)]
   );
   res.json(result.rows);
 });
@@ -231,9 +235,9 @@ app.post('/api/workspaces/:workspaceId/members', async (req: AuthedRequest, res)
   await pool.query(
     `INSERT INTO workspace_members(workspace_id,user_id,role) VALUES($1,$2,$3)
      ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=EXCLUDED.role`,
-    [req.params.workspaceId, user.rows[0].id, body.role]
+    [param(req.params.workspaceId), user.rows[0].id, body.role]
   );
-  await logActivity(req.params.workspaceId!, req.user!.id, 'member', user.rows[0].id, 'updated workspace membership', { role: body.role });
+  await logActivity(param(param(req.params.workspaceId)), req.user!.id, 'member', user.rows[0].id, 'updated workspace membership', { role: body.role });
   res.status(201).json({ ...user.rows[0], role: body.role });
 });
 
@@ -245,7 +249,7 @@ app.get('/api/workspaces/:workspaceId/projects', async (req: AuthedRequest, res)
       (SELECT count(*)::int FROM tasks t WHERE t.project_id=p.id AND t.status='Done') AS done_count,
       (SELECT count(*)::int FROM tasks t WHERE t.project_id=p.id AND t.status='Blocked') AS blocked_count
      FROM projects p WHERE p.workspace_id=$1 ORDER BY p.created_at DESC`,
-    [req.params.workspaceId]
+    [param(req.params.workspaceId)]
   );
   res.json(result.rows);
 });
@@ -256,16 +260,16 @@ app.post('/api/workspaces/:workspaceId/projects', async (req: AuthedRequest, res
   const result = await pool.query(
     `INSERT INTO projects(workspace_id,name,description,status,priority,start_date,target_date,owner_id)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [req.params.workspaceId, body.name, body.description, body.status, body.priority, body.startDate ?? null, body.targetDate ?? null, req.user!.id]
+    [param(req.params.workspaceId), body.name, body.description, body.status, body.priority, body.startDate ?? null, body.targetDate ?? null, req.user!.id]
   );
-  await logActivity(req.params.workspaceId!, req.user!.id, 'project', result.rows[0].id, 'created project', { name: body.name });
-  await invalidateDashboard(req.params.workspaceId!);
-  io.to(`workspace:${req.params.workspaceId}`).emit('project.updated', result.rows[0]);
+  await logActivity(param(param(req.params.workspaceId)), req.user!.id, 'project', result.rows[0].id, 'created project', { name: body.name });
+  await invalidateDashboard(param(param(req.params.workspaceId)));
+  io.to(`workspace:${param(req.params.workspaceId)}`).emit('project.updated', result.rows[0]);
   res.status(201).json(result.rows[0]);
 });
 
 app.get('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
-  const workspaceId = await projectWorkspace(req.params.projectId!);
+  const workspaceId = await projectWorkspace(param(param(req.params.projectId)));
   if (!workspaceId || !(await membership(req.user!.id, workspaceId))) return res.status(403).json({ message: 'Project access denied' });
   const result = await pool.query(
     `SELECT t.*,a.name AS assignee_name,r.name AS reporter_name
@@ -274,13 +278,13 @@ app.get('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
      LEFT JOIN users r ON r.id=t.reporter_id
      WHERE t.project_id=$1
      ORDER BY t.updated_at DESC`,
-    [req.params.projectId]
+    [param(req.params.projectId)]
   );
   res.json(result.rows);
 });
 
 app.post('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
-  const workspaceId = await projectWorkspace(req.params.projectId!);
+  const workspaceId = await projectWorkspace(param(param(req.params.projectId)));
   if (!workspaceId) return res.status(404).json({ message: 'Project not found' });
   const role = await membership(req.user!.id, workspaceId);
   if (!role) return res.status(403).json({ message: 'Project access denied' });
@@ -288,7 +292,7 @@ app.post('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
   const result = await pool.query(
     `INSERT INTO tasks(project_id,title,description,type,status,priority,assignee_id,reporter_id,story_points,due_date,labels)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [req.params.projectId, body.title, body.description, body.type, body.status, body.priority, body.assigneeId ?? null, req.user!.id, body.storyPoints ?? null, body.dueDate ?? null, body.labels]
+    [param(req.params.projectId), body.title, body.description, body.type, body.status, body.priority, body.assigneeId ?? null, req.user!.id, body.storyPoints ?? null, body.dueDate ?? null, body.labels]
   );
   if (body.assigneeId && body.assigneeId !== req.user!.id) {
     await pool.query(
@@ -303,7 +307,7 @@ app.post('/api/projects/:projectId/tasks', async (req: AuthedRequest, res) => {
 });
 
 app.patch('/api/tasks/:taskId', async (req: AuthedRequest, res) => {
-  const context = await taskContext(req.params.taskId!);
+  const context = await taskContext(param(param(req.params.taskId)));
   if (!context) return res.status(404).json({ message: 'Task not found' });
   if (!(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const body = taskPatchSchema.parse(req.body);
@@ -320,40 +324,40 @@ app.patch('/api/tasks/:taskId', async (req: AuthedRequest, res) => {
     }
   }
   if (!fields.length) return res.status(400).json({ message: 'No task fields supplied' });
-  values.push(req.params.taskId);
+  values.push(param(req.params.taskId));
   const result = await pool.query(
     `UPDATE tasks SET ${fields.join(',')},updated_at=now() WHERE id=$${values.length} RETURNING *`,
     values
   );
-  await logActivity(context.workspaceId, req.user!.id, 'task', req.params.taskId!, 'updated task', body);
+  await logActivity(context.workspaceId, req.user!.id, 'task', param(param(req.params.taskId)), 'updated task', body);
   await invalidateDashboard(context.workspaceId);
   io.to(`workspace:${context.workspaceId}`).emit('task.updated', result.rows[0]);
   res.json(result.rows[0]);
 });
 
 app.get('/api/tasks/:taskId/comments', async (req: AuthedRequest, res) => {
-  const context = await taskContext(req.params.taskId!);
+  const context = await taskContext(param(param(req.params.taskId)));
   if (!context || !(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const result = await pool.query(
     `SELECT c.id,c.body,c.created_at,u.id AS user_id,u.name AS user_name
      FROM comments c JOIN users u ON u.id=c.user_id
      WHERE c.task_id=$1 ORDER BY c.created_at`,
-    [req.params.taskId]
+    [param(req.params.taskId)]
   );
   res.json(result.rows);
 });
 
 app.post('/api/tasks/:taskId/comments', async (req: AuthedRequest, res) => {
-  const context = await taskContext(req.params.taskId!);
+  const context = await taskContext(param(param(req.params.taskId)));
   if (!context || !(await membership(req.user!.id, context.workspaceId))) return res.status(403).json({ message: 'Task access denied' });
   const body = commentSchema.parse(req.body);
   const result = await pool.query(
     `INSERT INTO comments(task_id,user_id,body) VALUES($1,$2,$3)
      RETURNING id,task_id,user_id,body,created_at`,
-    [req.params.taskId, req.user!.id, body.body]
+    [param(req.params.taskId), req.user!.id, body.body]
   );
   const comment = { ...result.rows[0], user_name: req.user!.name };
-  await logActivity(context.workspaceId, req.user!.id, 'comment', result.rows[0].id, 'commented on task', { taskId: req.params.taskId });
+  await logActivity(context.workspaceId, req.user!.id, 'comment', result.rows[0].id, 'commented on task', { taskId: param(req.params.taskId) });
   io.to(`workspace:${context.workspaceId}`).emit('comment.created', comment);
   res.status(201).json(comment);
 });
@@ -365,14 +369,14 @@ app.get('/api/workspaces/:workspaceId/activity', async (req: AuthedRequest, res)
        COALESCE(u.name,'System') AS actor_name
      FROM activities a LEFT JOIN users u ON u.id=a.actor_id
      WHERE a.workspace_id=$1 ORDER BY a.created_at DESC LIMIT 50`,
-    [req.params.workspaceId]
+    [param(req.params.workspaceId)]
   );
   res.json(result.rows);
 });
 
 app.get('/api/workspaces/:workspaceId/dashboard', async (req: AuthedRequest, res) => {
   if (!(await requireWorkspace(req, res))) return;
-  const cacheKey = `dashboard:${req.params.workspaceId}`;
+  const cacheKey = `dashboard:${param(req.params.workspaceId)}`;
   if (redis?.status === 'ready') {
     const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) return res.json(JSON.parse(cached));
@@ -387,7 +391,7 @@ app.get('/api/workspaces/:workspaceId/dashboard', async (req: AuthedRequest, res
        count(*) FILTER (WHERE t.status='Done' AND t.updated_at >= now() - interval '7 days')::int AS completed_week,
        count(*) FILTER (WHERE t.due_date < CURRENT_DATE AND t.status <> 'Done')::int AS overdue
        FROM tasks t JOIN projects p ON p.id=t.project_id WHERE p.workspace_id=$1`,
-      [req.params.workspaceId]
+      [param(req.params.workspaceId)]
     ),
     pool.query(
       `SELECT p.id,p.name,p.status,p.priority,
@@ -396,7 +400,7 @@ app.get('/api/workspaces/:workspaceId/dashboard', async (req: AuthedRequest, res
        count(t.id) FILTER (WHERE t.status='Blocked')::int AS blocked
        FROM projects p LEFT JOIN tasks t ON t.project_id=p.id
        WHERE p.workspace_id=$1 GROUP BY p.id ORDER BY p.created_at DESC`,
-      [req.params.workspaceId]
+      [param(req.params.workspaceId)]
     ),
     pool.query(
       `SELECT u.id,u.name,count(t.id) FILTER (WHERE t.status <> 'Done')::int AS active
@@ -404,7 +408,7 @@ app.get('/api/workspaces/:workspaceId/dashboard', async (req: AuthedRequest, res
        LEFT JOIN projects p ON p.workspace_id=wm.workspace_id
        LEFT JOIN tasks t ON t.project_id=p.id AND t.assignee_id=u.id
        WHERE wm.workspace_id=$1 GROUP BY u.id,u.name ORDER BY active DESC,u.name`,
-      [req.params.workspaceId]
+      [param(req.params.workspaceId)]
     )
   ]);
 
@@ -430,7 +434,7 @@ app.get('/api/workspaces/:workspaceId/search', async (req: AuthedRequest, res) =
        FROM workspace_members wm JOIN users u ON u.id=wm.user_id
        WHERE wm.workspace_id=$1 AND (u.name ILIKE $2 OR u.email ILIKE $2)
      LIMIT 25`,
-    [req.params.workspaceId, pattern]
+    [param(req.params.workspaceId), pattern]
   );
   res.json(result.rows);
 });
@@ -447,7 +451,7 @@ app.get('/api/notifications', async (req: AuthedRequest, res) => {
 app.patch('/api/notifications/:notificationId/read', async (req: AuthedRequest, res) => {
   await pool.query(
     `UPDATE notifications SET read_at=COALESCE(read_at,now()) WHERE id=$1 AND user_id=$2`,
-    [req.params.notificationId, req.user!.id]
+    [param(req.params.notificationId), req.user!.id]
   );
   res.status(204).end();
 });
