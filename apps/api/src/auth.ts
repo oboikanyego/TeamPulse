@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
-export type Role = 'admin' | 'manager' | 'member';
+export type Role = 'admin' | 'manager' | 'member' | 'viewer';
 
 export interface JwtUser {
   id: string;

@@ -8,6 +8,10 @@ import { PlanningComponent } from './pages/planning.component';
 import { AnalyticsComponent } from './pages/analytics.component';
 import { EngineeringComponent } from './pages/engineering.component';
 import { NotificationsComponent } from './pages/notifications.component';
+import { GovernanceComponent } from './pages/governance.component';
+import { ReportsComponent } from './pages/reports.component';
+import { AssistantComponent } from './pages/assistant.component';
+import { SettingsComponent } from './pages/settings.component';
 import { RegisterComponent } from './pages/register.component';
 import { TeamComponent } from './pages/team.component';
 
@@ -26,6 +30,10 @@ export const routes: Routes = [
       { path: 'analytics', component: AnalyticsComponent },
       { path: 'engineering', component: EngineeringComponent },
       { path: 'notifications', component: NotificationsComponent },
+      { path: 'governance', component: GovernanceComponent },
+      { path: 'reports', component: ReportsComponent },
+      { path: 'assistant', component: AssistantComponent },
+      { path: 'settings', component: SettingsComponent },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]
   },

@@ -1,0 +1,12 @@
+import { CommonModule, DatePipe } from '@angular/common';
+import { Component, effect, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ApiService } from '../core/api.service';
+import { WorkspaceStore } from '../core/workspace.store';
+import type { AuditEntry, Member, PermissionProfile } from '../models';
+@Component({standalone:true,imports:[CommonModule,FormsModule,DatePipe],template:`
+<div class="page-head"><div><p class="eyebrow">PHASE 8 · GOVERNANCE</p><h1>Governance & audit</h1><p class="muted">Role controls, permissions and immutable operational history.</p></div></div>
+<section class="notification-grid"><article class="card settings-card"><p class="eyebrow">YOUR ACCESS</p><h2>{{permissions()?.role || '—'}}</h2><div class="chip-list">@for(p of permissions()?.permissions || [];track p){<span class="pill">{{p}}</span>}</div></article>
+<article class="card settings-card"><p class="eyebrow">TEAM ROLES</p><h2>Access control</h2>@for(m of members();track m.id){<div class="member-role-row"><span><strong>{{m.name}}</strong><small>{{m.email}}</small></span><select [ngModel]="m.role" (ngModelChange)="changeRole(m,$event)" [disabled]="!canManage()"><option>admin</option><option>manager</option><option>member</option><option>viewer</option></select></div>}</article></section>
+<article class="card settings-card"><p class="eyebrow">AUDIT TRAIL</p><h2>Recent workspace changes</h2><div class="table-wrap"><table><thead><tr><th>When</th><th>Actor</th><th>Entity</th><th>Action</th></tr></thead><tbody>@for(a of audit();track a.id){<tr><td>{{a.created_at|date:'short'}}</td><td>{{a.actor_name}}</td><td>{{a.entity_type}}</td><td>{{a.action}}</td></tr>}</tbody></table></div></article>`})
+export class GovernanceComponent{private readonly api=inject(ApiService);readonly store=inject(WorkspaceStore);readonly permissions=signal<PermissionProfile|null>(null);readonly members=signal<Member[]>([]);readonly audit=signal<AuditEntry[]>([]);constructor(){effect(()=>{const w=this.store.current();if(w)this.load(w.id);});}canManage(){return this.permissions()?.permissions.includes('member.manage')??false;}changeRole(m:Member,role:'admin'|'manager'|'member'|'viewer'){const w=this.store.current();if(!w)return;this.api.updateMemberRole(w.id,m.id,role).subscribe(()=>this.load(w.id));}private load(id:string){this.api.permissions(id).subscribe(v=>this.permissions.set(v));this.api.members(id).subscribe(v=>this.members.set(v));this.api.audit(id).subscribe({next:v=>this.audit.set(v),error:()=>this.audit.set([])});}}

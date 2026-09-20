@@ -10,7 +10,7 @@ import type { Member } from '../models';
   template: `
     <div class="page-head">
       <div><p class="eyebrow">PEOPLE & OWNERSHIP</p><h1>Team</h1><p class="muted">Roles and current workload for {{ store.current()?.name }}.</p></div>
-      @if (store.current()?.role !== 'member') { <button class="btn primary" (click)="inviteOpen.set(true)">+ Add member</button> }
+      @if (store.current()?.role === 'admin' || store.current()?.role === 'manager') { <button class="btn primary" (click)="inviteOpen.set(true)">+ Add member</button> }
     </div>
 
     <section class="card panel">
@@ -33,7 +33,7 @@ import type { Member } from '../models';
           <div class="modal-head"><div><p class="eyebrow">ADD MEMBER</p><h3>Add a registered user</h3></div><button class="icon-btn" (click)="inviteOpen.set(false)">×</button></div>
           <p class="muted">For v1, the person registers first, then an admin or manager adds their email to the workspace.</p>
           <label>Email<input [(ngModel)]="inviteEmail" type="email" placeholder="person@company.com"></label>
-          <label>Role<select [(ngModel)]="inviteRole"><option value="member">Member</option><option value="manager">Manager</option><option value="admin">Admin</option></select></label>
+          <label>Role<select [(ngModel)]="inviteRole"><option value="viewer">Viewer</option><option value="member">Member</option><option value="manager">Manager</option><option value="admin">Admin</option></select></label>
           @if (inviteError()) { <p class="form-error">{{ inviteError() }}</p> }
           <button class="btn primary" (click)="addMember()">Add to workspace</button>
         </section>
