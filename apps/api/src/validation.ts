@@ -45,3 +45,19 @@ export const memberSchema = z.object({
 export const commentSchema = z.object({
   body: z.string().min(1).max(2000)
 });
+
+
+export const sprintSchema = z.object({
+  name: z.string().min(2).max(120),
+  goal: z.string().max(1000).default(''),
+  startDate: z.string().nullable().optional(),
+  endDate: z.string().nullable().optional()
+});
+
+export const sprintStatusSchema = z.object({
+  status: z.enum(['Planned', 'Active', 'Completed'])
+});
+
+export const taskSprintSchema = z.object({
+  sprintId: z.string().uuid().nullable()
+});
