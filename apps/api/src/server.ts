@@ -11,6 +11,8 @@ import { authRequired, type AuthedRequest, signToken, verifyToken, type Role } f
 import {
   commentSchema,
   credentialsSchema,
+  githubRepositorySchema,
+  githubTaskLinkSchema,
   memberSchema,
   projectSchema,
   registerSchema,
@@ -36,6 +38,8 @@ type Task = { id:string; project_id:string; sprint_id:string|null; title:string;
 type Comment = { id:string; task_id:string; user_id:string; body:string; created_at:string };
 type TimeEntry = { id:string; task_id:string; user_id:string; minutes:number; note:string; spent_at:string; created_at:string };
 type Capacity = { workspace_id:string; user_id:string; weekly_minutes:number };
+type GitHubRepository = { id:string; workspace_id:string; owner:string; repo:string; created_at:string };
+type GitHubTaskLink = { task_id:string; repository_id:string; pull_number:number; created_at:string };
 type Activity = { id:string; workspace_id:string; actor_id:string|null; entity_type:string; entity_id:string|null; action:string; metadata:Record<string,unknown>; created_at:string };
 type Notification = { id:string; user_id:string; message:string; read_at:string|null };
 
@@ -48,6 +52,8 @@ const tasks:Task[] = [];
 const comments:Comment[] = [];
 const timeEntries:TimeEntry[] = [];
 const capacities:Capacity[] = [];
+const githubRepositories:GitHubRepository[] = [];
+const githubTaskLinks:GitHubTaskLink[] = [];
 const activities:Activity[] = [];
 const notifications:Notification[] = [];
 
@@ -84,6 +90,26 @@ function logActivity(workspaceId:string, actorId:string|null, entityType:string,
   io.to(`workspace:${workspaceId}`).emit('activity.created', item);
   return item;
 }
+
+const githubHeaders = () => ({
+  Accept:'application/vnd.github+json',
+  'User-Agent':'TeamPulse',
+  ...(process.env.GITHUB_TOKEN ? {Authorization:`Bearer ${process.env.GITHUB_TOKEN}`} : {})
+});
+
+async function githubJson(path:string) {
+  const response=await fetch(`https://api.github.com${path}`,{headers:githubHeaders()});
+  if(!response.ok) throw new Error(`GitHub request failed: ${response.status}`);
+  return response.json() as Promise<any>;
+}
+
+function median(values:number[]) {
+  if(!values.length) return 0;
+  const sorted=[...values].sort((a,b)=>a-b);
+  const mid=Math.floor(sorted.length/2);
+  return sorted.length%2 ? sorted[mid]! : Math.round((sorted[mid-1]!+sorted[mid]!)/2);
+}
+
 async function seed() {
   if (users.length) return;
   const password_hash = await bcrypt.hash('Demo123!',10);
@@ -103,6 +129,7 @@ async function seed() {
     {workspace_id:workspace.id,user_id:manager.id,weekly_minutes:1500},
     {workspace_id:workspace.id,user_id:developer.id,weekly_minutes:1800}
   );
+  githubRepositories.push({id:randomUUID(),workspace_id:workspace.id,owner:'oboikanyego',repo:'TeamPulse',created_at:now()});
   const project:Project={id:randomUUID(),workspace_id:workspace.id,name:'Claims Platform',description:'Modernise claims intake and communications.',status:'Active',priority:'High',owner_id:manager.id};
   projects.push(project);
   const activeSprint:Sprint={id:randomUUID(),workspace_id:workspace.id,name:'Sprint 12',goal:'Stabilise mailbox intake and finish the delivery dashboard.',status:'Active',start_date:'2026-09-14',end_date:'2026-09-25',created_at:now()};
@@ -359,6 +386,110 @@ app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
   io.to(`workspace:${workspaceId}`).emit('task.updated',payload); res.json(payload);
 });
 
+
+
+app.get('/api/workspaces/:workspaceId/github/repositories',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  res.json(githubRepositories.filter(r=>r.workspace_id===workspaceId));
+});
+
+app.post('/api/workspaces/:workspaceId/github/repositories',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId,['admin','manager'])) return;
+  const body=githubRepositorySchema.parse(req.body);
+  const existing=githubRepositories.find(r=>r.workspace_id===workspaceId&&r.owner.toLowerCase()===body.owner.toLowerCase()&&r.repo.toLowerCase()===body.repo.toLowerCase());
+  if(existing) return res.json(existing);
+  const repository:GitHubRepository={id:randomUUID(),workspace_id:workspaceId,owner:body.owner,repo:body.repo,created_at:now()};
+  githubRepositories.push(repository);
+  logActivity(workspaceId,req.user!.id,'github_repository',repository.id,'connected repository',{repository:`${body.owner}/${body.repo}`});
+  res.status(201).json(repository);
+});
+
+app.get('/api/workspaces/:workspaceId/github/insights',async(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const repos=githubRepositories.filter(r=>r.workspace_id===workspaceId);
+  const snapshots:any[]=[];
+  for(const repository of repos){
+    try{
+      const [repo, pulls, runs, commits]=await Promise.all([
+        githubJson(`/repos/${repository.owner}/${repository.repo}`),
+        githubJson(`/repos/${repository.owner}/${repository.repo}/pulls?state=all&per_page=30&sort=updated&direction=desc`),
+        githubJson(`/repos/${repository.owner}/${repository.repo}/actions/runs?per_page=20`),
+        githubJson(`/repos/${repository.owner}/${repository.repo}/commits?per_page=20`)
+      ]);
+      const mergedPulls=(pulls as any[]).filter(p=>p.merged_at);
+      const mergeHours=mergedPulls.map(p=>Math.max(0,(new Date(p.merged_at).getTime()-new Date(p.created_at).getTime())/3600000));
+      const workflowRuns=(runs.workflow_runs??[]) as any[];
+      const completedRuns=workflowRuns.filter(r=>r.status==='completed');
+      const successful=completedRuns.filter(r=>r.conclusion==='success').length;
+      snapshots.push({
+        repository_id:repository.id,
+        full_name:repo.full_name,
+        url:repo.html_url,
+        default_branch:repo.default_branch,
+        open_pull_requests:(pulls as any[]).filter(p=>p.state==='open').length,
+        merged_pull_requests:mergedPulls.length,
+        median_pr_lead_hours:median(mergeHours),
+        ci_success_rate:completedRuns.length?Math.round(successful/completedRuns.length*100):0,
+        latest_ci:workflowRuns[0]?{status:workflowRuns[0].status,conclusion:workflowRuns[0].conclusion,name:workflowRuns[0].name,updated_at:workflowRuns[0].updated_at}:null,
+        commit_count:(commits as any[]).length,
+        latest_commit:(commits as any[])[0]?{sha:(commits as any[])[0].sha,message:(commits as any[])[0].commit?.message,author:(commits as any[])[0].commit?.author?.name,date:(commits as any[])[0].commit?.author?.date}:null,
+        pull_requests:(pulls as any[]).slice(0,10).map(p=>({number:p.number,title:p.title,state:p.state,merged_at:p.merged_at,user:p.user?.login,url:p.html_url,created_at:p.created_at,updated_at:p.updated_at})),
+        recent_runs:workflowRuns.slice(0,8).map(r=>({id:r.id,name:r.name,status:r.status,conclusion:r.conclusion,branch:r.head_branch,url:r.html_url,updated_at:r.updated_at}))
+      });
+    }catch(error){
+      snapshots.push({repository_id:repository.id,full_name:`${repository.owner}/${repository.repo}`,error:error instanceof Error?error.message:'GitHub unavailable'});
+    }
+  }
+  const healthy=snapshots.filter(s=>!s.error);
+  res.json({
+    summary:{
+      repositories:repos.length,
+      open_pull_requests:healthy.reduce((sum,s)=>sum+s.open_pull_requests,0),
+      ci_success_rate:healthy.length?Math.round(healthy.reduce((sum,s)=>sum+s.ci_success_rate,0)/healthy.length):0,
+      median_pr_lead_hours:median(healthy.map(s=>s.median_pr_lead_hours).filter(Boolean))
+    },
+    repositories:snapshots
+  });
+});
+
+app.post('/api/tasks/:taskId/github-link',(req:AuthedRequest,res)=>{
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
+  if(!task) return res.status(404).json({message:'Task not found'});
+  const workspaceId=taskWorkspace(task)!;
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const body=githubTaskLinkSchema.parse(req.body);
+  const repository=githubRepositories.find(r=>r.workspace_id===workspaceId&&r.owner.toLowerCase()===body.owner.toLowerCase()&&r.repo.toLowerCase()===body.repo.toLowerCase());
+  if(!repository) return res.status(400).json({message:'Repository is not connected to this workspace'});
+  const existing=githubTaskLinks.find(l=>l.task_id===task.id&&l.repository_id===repository.id&&l.pull_number===body.pullNumber);
+  if(existing) return res.json(existing);
+  const link:GitHubTaskLink={task_id:task.id,repository_id:repository.id,pull_number:body.pullNumber,created_at:now()};
+  githubTaskLinks.push(link);
+  logActivity(workspaceId,req.user!.id,'github_pull_request',String(body.pullNumber),'linked pull request',{task:task.title,repository:`${body.owner}/${body.repo}`,pullNumber:body.pullNumber});
+  res.status(201).json(link);
+});
+
+app.get('/api/tasks/:taskId/github-links',async(req:AuthedRequest,res)=>{
+  const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
+  if(!task) return res.status(404).json({message:'Task not found'});
+  const workspaceId=taskWorkspace(task)!;
+  if(!requireWorkspace(req,res,workspaceId)) return;
+  const links=githubTaskLinks.filter(l=>l.task_id===task.id);
+  const result=[];
+  for(const link of links){
+    const repository=githubRepositories.find(r=>r.id===link.repository_id);
+    if(!repository) continue;
+    try{
+      const pull=await githubJson(`/repos/${repository.owner}/${repository.repo}/pulls/${link.pull_number}`);
+      result.push({...link,repository:`${repository.owner}/${repository.repo}`,title:pull.title,state:pull.state,merged:!!pull.merged_at,url:pull.html_url,author:pull.user?.login});
+    }catch{
+      result.push({...link,repository:`${repository.owner}/${repository.repo}`,title:`PR #${link.pull_number}`,state:'unknown',merged:false,url:`https://github.com/${repository.owner}/${repository.repo}/pull/${link.pull_number}`});
+    }
+  }
+  res.json(result);
+});
 
 app.get('/api/tasks/:taskId/time',(req:AuthedRequest,res)=>{
   const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
