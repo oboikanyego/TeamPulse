@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import cors from 'cors';
 import express, { type Response } from 'express';
@@ -949,6 +950,19 @@ app.get('/api/workspaces/:workspaceId/billing',(req:AuthedRequest,res)=>{
   const workspaceId=routeParam(req.params.workspaceId); if(!requireWorkspace(req,res,workspaceId))return;
   const plan=planFor(workspaceId); const used=memberships.filter(m=>m.workspace_id===workspaceId).length;
   res.json({...plan,seats_used:used,features:{audit:true,exports:true,assistant:true,slack:true,github:true},checkout_enabled:false});
+});
+
+
+app.get('/api/workspaces/:workspaceId/metabase/embed',(req:AuthedRequest,res)=>{
+  const workspaceId=routeParam(req.params.workspaceId);
+  if(!requireWorkspace(req,res,workspaceId))return;
+  const metabaseUrl=process.env.METABASE_URL?.replace(/\/$/,'');
+  const secret=process.env.METABASE_SECRET_KEY;
+  const dashboardId=process.env.METABASE_DASHBOARD_ID;
+  if(!metabaseUrl||!secret||!dashboardId)return res.json({configured:false,url:null});
+  const payload={resource:{dashboard:Number(dashboardId)},params:{workspace_id:[workspaceId]},exp:Math.round(Date.now()/1000)+600};
+  const token=jwt.sign(payload,secret);
+  res.json({configured:true,url:`${metabaseUrl}/embed/dashboard/${token}#bordered=false&titled=false`});
 });
 
 app.get('/api/workspaces/:workspaceId/notification-settings',(req:AuthedRequest,res)=>{
