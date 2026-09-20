@@ -7,3 +7,6 @@ coverage/
 !.env.example
 .DS_Store
 *.log
+
+.teampulse-data/
+apps/api/.teampulse-data/
