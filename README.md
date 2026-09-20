@@ -87,3 +87,33 @@ The Render free service can sleep when idle, so interval-based automations are b
 ### GitHub CI automation reliability
 
 CI-failure automation first reuses the short-lived engineering-insights cache, then falls back to GitHub's Actions API. Public repositories can work without credentials, but shared-host unauthenticated rate limits can return HTTP 403. Set `GITHUB_TOKEN` on the API service for reliable scheduled CI polling in production.
+
+
+## Phase 8 — Governance, audit & advanced RBAC
+
+TeamPulse now supports four workspace roles: admin, manager, member and read-only viewer. A permission matrix backs privileged operations, admins can change member roles, and managers/admins can inspect a workspace audit trail. Viewer mutations are blocked server-side rather than only hidden in the UI.
+
+## Phase 9 — Executive reporting & Metabase BI
+
+Executive reporting includes native summary KPIs, risk tables, CSV export and a Metabase-ready BI layer. When managed PostgreSQL is enabled, TeamPulse projects application state into relational reporting tables:
+- `bi_projects`
+- `bi_sprints`
+- `bi_tasks`
+- `bi_members`
+- `bi_time_entries`
+- `bi_workspace_summary` view
+
+Metabase guest embedding is workspace-scoped with a server-generated JWT and a locked `workspace_id` parameter. Configure:
+- `METABASE_URL`
+- `METABASE_SECRET_KEY`
+- `METABASE_DASHBOARD_ID`
+
+The Reports page automatically falls back to native TeamPulse reporting if Metabase is not configured.
+
+## Phase 10 — Delivery assistant
+
+The Delivery Assistant analyses current workspace state and returns evidence-based delivery insights for blockers, overdue work, review queues, unassigned work and active sprint focus. The current implementation is deterministic by design, which keeps it useful without requiring an external AI key and provides a stable foundation for a later model-backed assistant.
+
+## Phase 11 — SaaS foundation
+
+TeamPulse now includes onboarding progress, workspace invitations, invitation acceptance, configurable workspace timezone/week start, workspace settings, seat/plan metadata and a billing-ready domain model. Checkout remains disabled until a billing provider is deliberately integrated.
