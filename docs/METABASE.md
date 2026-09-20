@@ -1,4 +1,4 @@
-# TeamPulse + Metabase
+# TeamPulse + Metabase Open Source
 
 ## Data source
 
@@ -33,3 +33,15 @@ Never place `METABASE_SECRET_KEY` in Angular environment files.
 ## Production hosting
 
 Metabase itself should use a separate production PostgreSQL database for its own application metadata. Do not use the embedded H2 database for production. TeamPulse PostgreSQL remains the analytics data source.
+
+
+## OSS deployment resources
+
+Repository assets:
+- `metabase/Dockerfile` — official `metabase/metabase:latest` image.
+- `metabase/docker-compose.yml` — local OSS + dedicated PostgreSQL application database.
+- `metabase/render.yaml.example` — Render Blueprint example using a dedicated Metabase app database.
+
+The Render example intentionally uses a compute class with more than the minimum 1 GB RAM requirement. Review Render pricing before creating that service.
+
+On Metabase OSS, guest embeds are view-only and display Metabase branding. This is expected and does not affect workspace data isolation.
