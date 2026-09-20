@@ -148,7 +148,7 @@ export class ApiService {
   executiveReport(workspaceId:string){ return this.http.get<ExecutiveReport>(`${this.base}/workspaces/${workspaceId}/reports/executive`); }
   exportReportUrl(workspaceId:string){ return `${this.base}/workspaces/${workspaceId}/reports/export.csv`; }
   downloadReport(workspaceId:string){ return this.http.get(`${this.base}/workspaces/${workspaceId}/reports/export.csv`,{responseType:'blob'}); }
-  metabaseEmbed(workspaceId:string){ return this.http.get<{configured:boolean;url:string|null}>(`${this.base}/workspaces/${workspaceId}/metabase/embed`); }
+  metabaseEmbed(workspaceId:string){ return this.http.get<{configured:boolean;edition:'oss';url:string|null}>(`${this.base}/workspaces/${workspaceId}/metabase/embed`); }
   assistant(workspaceId:string,body:{focus:string;question:string}){ return this.http.post<AssistantResponse>(`${this.base}/workspaces/${workspaceId}/assistant`,body); }
   onboarding(workspaceId:string){ return this.http.get<OnboardingState>(`${this.base}/workspaces/${workspaceId}/onboarding`); }
   invitations(workspaceId:string){ return this.http.get<Invitation[]>(`${this.base}/workspaces/${workspaceId}/invitations`); }
