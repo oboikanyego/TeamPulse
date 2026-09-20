@@ -4,6 +4,7 @@ import { ShellComponent } from './layout/shell.component';
 import { BoardComponent } from './pages/board.component';
 import { DashboardComponent } from './pages/dashboard.component';
 import { LoginComponent } from './pages/login.component';
+import { PlanningComponent } from './pages/planning.component';
 import { RegisterComponent } from './pages/register.component';
 import { TeamComponent } from './pages/team.component';
 
@@ -18,6 +19,7 @@ export const routes: Routes = [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'project/:projectId', component: BoardComponent },
       { path: 'team', component: TeamComponent },
+      { path: 'planning', component: PlanningComponent },
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' }
     ]
   },
