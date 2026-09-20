@@ -2,7 +2,7 @@ export const openApiSpec = {
   openapi: '3.0.3',
   info: {
     title: 'TeamPulse API',
-    version: '5.0.0',
+    version: '6.0.0',
     description: 'REST API for TeamPulse workspaces, projects, delivery planning, tasks, team collaboration and realtime delivery operations.'
   },
   servers: [
@@ -12,7 +12,7 @@ export const openApiSpec = {
   tags: [
     { name: 'Auth' }, { name: 'Workspaces' }, { name: 'Projects' }, { name: 'Sprints' },
     { name: 'Tasks' }, { name: 'Team' }, { name: 'Comments' }, { name: 'Dashboard' },
-    { name: 'Search' }, { name: 'Notifications' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }, { name: 'System' }
+    { name: 'Search' }, { name: 'Notifications' }, { name: 'Slack' }, { name: 'Automations' }, { name: 'Time Tracking' }, { name: 'Analytics' }, { name: 'GitHub' }, { name: 'System' }
   ],
   components: {
     securitySchemes: {
@@ -114,6 +114,27 @@ export const openApiSpec = {
     '/tasks/{taskId}/github-links': {
       get:{tags:['GitHub','Tasks'],summary:'List GitHub pull requests linked to a task',parameters:[{name:'taskId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Linked pull requests'}}}
     },
-    '/notifications': { get:{tags:['Notifications'],summary:'List notifications for the current user',responses:{'200':{description:'Notification list'}}} }
+    '/workspaces/{workspaceId}/notification-settings': {
+      get:{tags:['Notifications'],summary:'Get workspace notification preferences and masked Slack status',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Notification settings'}}}
+    },
+    '/workspaces/{workspaceId}/notification-preferences': {
+      patch:{tags:['Notifications'],summary:'Update workspace notification preferences',description:'Requires admin or manager role.',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],requestBody:{required:true,content:{'application/json':{schema:{type:'object',properties:{taskAssigned:{type:'boolean'},taskBlocked:{type:'boolean'},taskOverdue:{type:'boolean'},sprintChanged:{type:'boolean'},ciFailed:{type:'boolean'},dailyDigest:{type:'boolean'},slackEnabled:{type:'boolean'}}}}}},responses:{'200':{description:'Preferences updated'}}}
+    },
+    '/workspaces/{workspaceId}/slack': {
+      put:{tags:['Slack'],summary:'Configure Slack incoming webhook',description:'Requires admin role. The webhook URL is never returned by read endpoints.',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],requestBody:{required:true,content:{'application/json':{schema:{type:'object',properties:{webhookUrl:{type:'string',format:'uri',nullable:true},channelName:{type:'string',nullable:true},enabled:{type:'boolean'}}}}}},responses:{'200':{description:'Slack configuration updated'}}}
+    },
+    '/workspaces/{workspaceId}/slack/test': {
+      post:{tags:['Slack'],summary:'Send a Slack test notification',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Test message sent'},'400':{description:'Slack not configured or enabled'}}}
+    },
+    '/workspaces/{workspaceId}/automations/run': {
+      post:{tags:['Automations'],summary:'Run overdue, blocker, CI and optional digest checks immediately',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],requestBody:{content:{'application/json':{schema:{type:'object',properties:{includeDigest:{type:'boolean'}}}}}},responses:{'200':{description:'Automation run result'}}}
+    },
+    '/workspaces/{workspaceId}/automation-history': {
+      get:{tags:['Automations'],summary:'List deduplicated automation events',parameters:[{name:'workspaceId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Automation event history'}}}
+    },
+    '/notifications': { get:{tags:['Notifications'],summary:'List notifications for the current user',responses:{'200':{description:'Notification list'}}} },
+    '/notifications/{notificationId}/read': {
+      patch:{tags:['Notifications'],summary:'Mark a notification as read',parameters:[{name:'notificationId',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Notification updated'},'404':{description:'Notification not found'}}}
+    }
   }
 } as const;
