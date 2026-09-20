@@ -602,7 +602,7 @@ app.post('/api/projects/:projectId/tasks',(req:AuthedRequest,res)=>{
 
 app.patch('/api/tasks/:taskId',(req:AuthedRequest,res)=>{
   const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
-  const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
+  const workspaceId=taskWorkspace(task)!; if(!requirePermission(req,res,workspaceId,'task.write')) return;
   const body=taskPatchSchema.parse(req.body);
   const previousStatus=task.status;
   const previousAssignee=task.assignee_id;
@@ -747,7 +747,7 @@ app.post('/api/tasks/:taskId/time',(req:AuthedRequest,res)=>{
   const task=tasks.find(t=>t.id===routeParam(req.params.taskId));
   if(!task) return res.status(404).json({message:'Task not found'});
   const workspaceId=taskWorkspace(task)!;
-  if(!requireWorkspace(req,res,workspaceId)) return;
+  if(!requirePermission(req,res,workspaceId,'task.write')) return;
   const body=timeEntrySchema.parse(req.body);
   const entry:TimeEntry={
     id:randomUUID(),task_id:task.id,user_id:req.user!.id,minutes:body.minutes,
@@ -821,7 +821,7 @@ app.get('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{
 
 app.post('/api/tasks/:taskId/comments',(req:AuthedRequest,res)=>{
   const task=tasks.find(t=>t.id===routeParam(req.params.taskId)); if(!task) return res.status(404).json({message:'Task not found'});
-  const workspaceId=taskWorkspace(task)!; if(!requireWorkspace(req,res,workspaceId)) return;
+  const workspaceId=taskWorkspace(task)!; if(!requirePermission(req,res,workspaceId,'task.write')) return;
   const body=commentSchema.parse(req.body);
   const comment:Comment={id:randomUUID(),task_id:task.id,user_id:req.user!.id,body:body.body,created_at:now()}; comments.push(comment);
   logActivity(workspaceId,req.user!.id,'comment',comment.id,'commented on task',{title:task.title});
@@ -931,6 +931,18 @@ app.post('/api/workspaces/:workspaceId/invitations',(req:AuthedRequest,res)=>{
 app.get('/api/workspaces/:workspaceId/invitations',(req:AuthedRequest,res)=>{
   const workspaceId=routeParam(req.params.workspaceId); if(!requirePermission(req,res,workspaceId,'member.manage'))return;
   res.json(invitations.filter(i=>i.workspace_id===workspaceId).map(i=>({...i,token:undefined})));
+});
+
+
+app.post('/api/invitations/:token/accept',(req:AuthedRequest,res)=>{
+  const invitation=invitations.find(i=>i.token===routeParam(req.params.token)&&i.status==='pending');
+  if(!invitation)return res.status(404).json({message:'Invitation not found or no longer active'});
+  if(invitation.email!==req.user!.email.toLowerCase())return res.status(403).json({message:'Invitation email does not match current user'});
+  const existing=memberships.find(m=>m.workspace_id===invitation.workspace_id&&m.user_id===req.user!.id);
+  if(existing)existing.role=invitation.role;else memberships.push({workspace_id:invitation.workspace_id,user_id:req.user!.id,role:invitation.role});
+  invitation.status='accepted';invitation.accepted_at=now();queuePersist();
+  logActivity(invitation.workspace_id,req.user!.id,'invitation',invitation.id,'accepted invitation',{role:invitation.role});
+  res.json({workspace_id:invitation.workspace_id,role:invitation.role,status:invitation.status});
 });
 
 app.get('/api/workspaces/:workspaceId/settings',(req:AuthedRequest,res)=>{
