@@ -155,3 +155,60 @@ export interface DeliveryAnalytics {
     utilization: number;
   }>;
 }
+
+
+export interface GitHubRepository {
+  id: string;
+  workspace_id: string;
+  owner: string;
+  repo: string;
+  created_at: string;
+}
+
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  state: string;
+  merged_at: string | null;
+  user: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GitHubInsights {
+  summary: {
+    repositories: number;
+    open_pull_requests: number;
+    ci_success_rate: number;
+    median_pr_lead_hours: number;
+  };
+  repositories: Array<{
+    repository_id: string;
+    full_name: string;
+    url?: string;
+    default_branch?: string;
+    open_pull_requests?: number;
+    merged_pull_requests?: number;
+    median_pr_lead_hours?: number;
+    ci_success_rate?: number;
+    commit_count?: number;
+    latest_commit?: { sha:string; message:string; author:string; date:string } | null;
+    latest_ci?: { status:string; conclusion:string|null; name:string; updated_at:string } | null;
+    pull_requests?: GitHubPullRequest[];
+    recent_runs?: Array<{ id:number; name:string; status:string; conclusion:string|null; branch:string; url:string; updated_at:string }>;
+    error?: string;
+  }>;
+}
+
+export interface GitHubTaskLink {
+  task_id: string;
+  repository_id: string;
+  pull_number: number;
+  repository: string;
+  title: string;
+  state: string;
+  merged: boolean;
+  url: string;
+  author?: string;
+}
