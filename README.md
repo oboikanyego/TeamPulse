@@ -42,3 +42,8 @@ Seeded automatically in non-production environments and when `SEED_DEMO=true`:
 ## Phase 2 — Sprint planning
 
 TeamPulse now supports sprint creation, Planned/Active/Completed lifecycle states, backlog-to-sprint assignment, sprint goals and dates, point-based completion metrics, and sprint activity events.
+
+
+## Phase 3 — Time tracking & sprint analytics
+
+TeamPulse now supports task-level work logs, weekly member capacity settings, sprint velocity, planned-vs-delivered story points, active-sprint burndown indicators, logged-time summaries, cycle-time metrics and team utilisation reporting.
