@@ -212,3 +212,44 @@ export interface GitHubTaskLink {
   url: string;
   author?: string;
 }
+
+
+export interface NotificationPreferences {
+  workspace_id: string;
+  task_assigned: boolean;
+  task_blocked: boolean;
+  task_overdue: boolean;
+  sprint_changed: boolean;
+  ci_failed: boolean;
+  daily_digest: boolean;
+  slack_enabled: boolean;
+}
+
+export interface NotificationSettings {
+  preferences: NotificationPreferences;
+  slack: {
+    configured: boolean;
+    enabled: boolean;
+    channel_name: string | null;
+    updated_at: string | null;
+  };
+}
+
+export interface TeamPulseNotification {
+  id: string;
+  user_id: string;
+  workspace_id?: string | null;
+  kind?: string;
+  message: string;
+  read_at: string | null;
+  created_at?: string;
+}
+
+export interface AutomationEvent {
+  id: string;
+  workspace_id: string;
+  key: string;
+  kind: string;
+  message: string;
+  created_at: string;
+}
