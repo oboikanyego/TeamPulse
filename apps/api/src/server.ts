@@ -220,7 +220,7 @@ app.get('/api/workspaces/:workspaceId/dashboard',(req:AuthedRequest,res)=>{
       overdue:ts.filter(t=>t.due_date&&t.status!=='Done'&&new Date(t.due_date).getTime()<Date.now()).length
     },
     projects:ps.map(p=>{const pt=ts.filter(t=>t.project_id===p.id);return{id:p.id,name:p.name,status:p.status,priority:p.priority,total:pt.length,done:pt.filter(t=>t.status==='Done').length,blocked:pt.filter(t=>t.status==='Blocked').length};}),
-    workload:memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,active:ts.filter(t=>t.assignee_id===user.id&&t.status!=='Done').length};})
+    workload:memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,active:ts.filter(t=>t.assignee_id===u.id&&t.status!=='Done').length};})
   });
 });
 
@@ -310,7 +310,7 @@ app.get('/api/workspaces/:workspaceId/activity',(req:AuthedRequest,res)=>{
 app.get('/api/workspaces/:workspaceId/members',(req:AuthedRequest,res)=>{
   if(!requireWorkspace(req,res,routeParam(req.params.workspaceId))) return;
   const projectIds=new Set(projects.filter(p=>p.workspace_id===routeParam(req.params.workspaceId)).map(p=>p.id));
-  res.json(memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,email:u.email,avatar_url:u.avatar_url,role:m.role,active_tasks:tasks.filter(t=>projectIds.has(t.project_id)&&t.assignee_id===user.id&&t.status!=='Done').length};}));
+  res.json(memberships.filter(m=>m.workspace_id===routeParam(req.params.workspaceId)).map(m=>{const u=users.find(x=>x.id===m.user_id)!;return{id:u.id,name:u.name,email:u.email,avatar_url:u.avatar_url,role:m.role,active_tasks:tasks.filter(t=>projectIds.has(t.project_id)&&t.assignee_id===u.id&&t.status!=='Done').length};}));
 });
 
 app.post('/api/workspaces/:workspaceId/members',async(req:AuthedRequest,res)=>{
