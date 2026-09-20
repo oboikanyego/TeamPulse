@@ -33,6 +33,10 @@ import type { Project, SearchResult, Workspace } from '../models';
           <a routerLink="/analytics" routerLinkActive="active"><span>◒</span>Analytics</a>
           <a routerLink="/engineering" routerLinkActive="active"><span>⌘</span>Engineering</a>
           <a routerLink="/notifications" routerLinkActive="active"><span>♢</span>Notifications</a>
+          <a routerLink="/governance" routerLinkActive="active"><span>◇</span>Governance</a>
+          <a routerLink="/reports" routerLinkActive="active"><span>▤</span>Reports</a>
+          <a routerLink="/assistant" routerLinkActive="active"><span>✦</span>Assistant</a>
+          <a routerLink="/settings" routerLinkActive="active"><span>⚙</span>Settings</a>
         </nav>
 
         <div class="sidebar-section">
