@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { environment } from '../../environments/environment';
-import type { Activity, AutomationEvent, Comment, Dashboard, DeliveryAnalytics, GitHubInsights, GitHubRepository, GitHubTaskLink, Member, NotificationPreferences, NotificationSettings, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TeamPulseNotification, TimeEntry, Workspace } from '../models';
+import type { Activity, AssistantResponse, AuditEntry, AutomationEvent, BillingState, Comment, Dashboard, DeliveryAnalytics, ExecutiveReport, GitHubInsights, GitHubRepository, GitHubTaskLink, Invitation, Member, NotificationPreferences, NotificationSettings, OnboardingState, PermissionProfile, PlanningBoard, Project, SearchResult, Sprint, Task, TaskStatus, TeamPulseNotification, TimeEntry, Workspace, WorkspaceAdminSettings } from '../models';
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
@@ -141,6 +141,19 @@ export class ApiService {
   linkGitHubPullRequest(taskId: string, body: { owner:string; repo:string; pullNumber:number }) {
     return this.http.post<GitHubTaskLink>(`${this.base}/tasks/${taskId}/github-link`, body);
   }
+
+  permissions(workspaceId: string) { return this.http.get<PermissionProfile>(`${this.base}/workspaces/${workspaceId}/permissions`); }
+  updateMemberRole(workspaceId:string,userId:string,role:'admin'|'manager'|'member'|'viewer'){ return this.http.patch(`${this.base}/workspaces/${workspaceId}/members/${userId}/role`,{role}); }
+  audit(workspaceId:string){ return this.http.get<AuditEntry[]>(`${this.base}/workspaces/${workspaceId}/audit`); }
+  executiveReport(workspaceId:string){ return this.http.get<ExecutiveReport>(`${this.base}/workspaces/${workspaceId}/reports/executive`); }
+  exportReportUrl(workspaceId:string){ return `${this.base}/workspaces/${workspaceId}/reports/export.csv`; }
+  assistant(workspaceId:string,body:{focus:string;question:string}){ return this.http.post<AssistantResponse>(`${this.base}/workspaces/${workspaceId}/assistant`,body); }
+  onboarding(workspaceId:string){ return this.http.get<OnboardingState>(`${this.base}/workspaces/${workspaceId}/onboarding`); }
+  invitations(workspaceId:string){ return this.http.get<Invitation[]>(`${this.base}/workspaces/${workspaceId}/invitations`); }
+  invite(workspaceId:string,email:string,role:string){ return this.http.post<Invitation>(`${this.base}/workspaces/${workspaceId}/invitations`,{email,role}); }
+  workspaceSettings(workspaceId:string){ return this.http.get<WorkspaceAdminSettings>(`${this.base}/workspaces/${workspaceId}/settings`); }
+  updateWorkspaceSettings(workspaceId:string,body:{name:string;description:string;timezone:string;weekStartsOn:'monday'|'sunday'}){ return this.http.patch<WorkspaceAdminSettings>(`${this.base}/workspaces/${workspaceId}/settings`,body); }
+  billing(workspaceId:string){ return this.http.get<BillingState>(`${this.base}/workspaces/${workspaceId}/billing`); }
 
   notificationSettings(workspaceId: string) {
     return this.http.get<NotificationSettings>(`${this.base}/workspaces/${workspaceId}/notification-settings`);
