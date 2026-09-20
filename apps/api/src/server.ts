@@ -208,12 +208,14 @@ io.on('connection',socket=>{
 });
 
 app.get('/health',(_req,res)=>res.json({status:'ok',database:persistenceMode,redis:cacheMode}));
-app.get('/ready',async(_req,res)=>{
+const readinessHandler=async(_req:express.Request,res:express.Response)=>{
   const database = await persistenceReady();
   const redis = cacheMode==='disabled' ? null : await cacheReady();
   const ready = persistenceMode==='memory-fallback' ? true : database;
   res.status(ready?200:503).json({status:ready?'ready':'not-ready',database,redis,mode:{database:persistenceMode,redis:cacheMode}});
-});
+};
+app.get('/ready',readinessHandler);
+app.get('/api/system/ready',readinessHandler);
 
 app.post('/api/auth/register',async(req,res)=>{
   const body=registerSchema.parse(req.body);
