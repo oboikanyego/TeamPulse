@@ -117,3 +117,12 @@ The Delivery Assistant analyses current workspace state and returns evidence-bas
 ## Phase 11 — SaaS foundation
 
 TeamPulse now includes onboarding progress, workspace invitations, invitation acceptance, configurable workspace timezone/week start, workspace settings, seat/plan metadata and a billing-ready domain model. Checkout remains disabled until a billing provider is deliberately integrated.
+
+
+### Metabase Open Source
+
+TeamPulse uses self-hosted **Metabase Open Source** for embedded BI. The repository includes an OSS Docker setup under `metabase/`, plus a Render Blueprint example.
+
+The Angular Reports screen requests a short-lived signed guest-embed URL from the TeamPulse API. The API locks the current `workspace_id` into the JWT so the browser cannot switch the embedded dashboard to another workspace.
+
+Metabase OSS is optional at runtime. If it is unavailable or not configured, native TeamPulse executive reports and CSV export continue to work.
