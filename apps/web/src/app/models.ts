@@ -253,3 +253,23 @@ export interface AutomationEvent {
   message: string;
   created_at: string;
 }
+
+
+export interface PermissionProfile { role:'admin'|'manager'|'member'|'viewer'; permissions:string[]; }
+export interface AuditEntry { id:string; workspace_id:string; actor_id:string|null; actor_name:string; entity_type:string; entity_id:string|null; action:string; metadata:Record<string,unknown>; created_at:string; }
+export interface ExecutiveReport {
+  generated_at:string;
+  summary:{total_tasks:number;completed_tasks:number;blocked_tasks:number;overdue_tasks:number;planned_points:number;delivered_points:number;delivery_rate:number;logged_hours:number;active_sprint:string|null};
+  by_priority:Array<{priority:string;count:number}>;
+  by_status:Array<{status:string;count:number}>;
+  risks:Array<{id:string;title:string;status:string;priority:string;due_date:string|null}>;
+}
+export interface AssistantResponse { generated_at:string;focus:string;question:string;mode:string;summary:string;insights:string[];recommendations:string[];metrics:{total:number;blocked:number;overdue:number;in_review:number;unassigned:number}; }
+export interface OnboardingState { steps:Array<{key:string;label:string;complete:boolean}>;completed:number;total:number;percent:number; }
+export interface Invitation { id:string;workspace_id:string;email:string;role:string;status:string;invited_by:string;created_at:string;accepted_at:string|null; }
+export interface WorkspaceAdminSettings {
+  workspace:{id:string;name:string;description:string;owner_id:string};
+  settings:{workspace_id:string;timezone:string;week_starts_on:'monday'|'sunday';updated_at:string};
+  plan:{workspace_id:string;plan:'free'|'team'|'business';seats:number;status:'active'|'trial';trial_ends_at:string|null;updated_at:string};
+}
+export interface BillingState { workspace_id:string;plan:string;seats:number;status:string;trial_ends_at:string|null;seats_used:number;features:Record<string,boolean>;checkout_enabled:boolean; }
