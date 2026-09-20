@@ -9,7 +9,7 @@ export interface Workspace {
   id: string;
   name: string;
   description: string;
-  role: 'admin' | 'manager' | 'member';
+  role: 'admin' | 'manager' | 'member' | 'viewer';
   project_count?: number;
 }
 
@@ -46,7 +46,7 @@ export interface Task {
 }
 
 export interface Member extends User {
-  role: 'admin' | 'manager' | 'member';
+  role: 'admin' | 'manager' | 'member' | 'viewer';
   active_tasks: number;
 }
 
