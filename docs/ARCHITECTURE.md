@@ -23,6 +23,11 @@ PostgreSQL     Redis
 
 ## V1 boundaries
 
-Included: auth, RBAC, workspaces, members, projects, kanban tasks, comments, activity, notifications, dashboard, realtime updates, demo seed, CI and deployment.
+Included: auth, RBAC, workspaces, members, projects, kanban tasks, sprint planning/lifecycle, comments, activity, notifications, dashboard, realtime updates, Swagger/OpenAPI docs, demo seed, CI and deployment.
 
-Deferred: billing, email delivery, GitHub/Slack integrations, sprints, time tracking and AI features.
+Deferred: billing, email delivery, GitHub/Slack integrations, time tracking and AI features.
+
+
+## API documentation
+
+The OpenAPI 3.0 specification is versioned in `apps/api/src/openapi.ts`. The API serves the raw document at `/openapi.json` and interactive Swagger UI at `/docs`.

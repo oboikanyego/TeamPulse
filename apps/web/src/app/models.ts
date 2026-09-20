@@ -30,6 +30,7 @@ export type TaskStatus = 'Backlog' | 'To Do' | 'In Progress' | 'Blocked' | 'Revi
 export interface Task {
   id: string;
   project_id: string;
+  sprint_id?: string | null;
   title: string;
   description: string;
   type: 'Feature' | 'Bug' | 'Task' | 'Improvement' | 'Spike';
@@ -92,4 +93,26 @@ export interface SearchResult {
   id: string;
   title: string;
   subtitle: string;
+}
+
+
+export interface Sprint {
+  id: string;
+  workspace_id: string;
+  name: string;
+  goal: string;
+  status: 'Planned' | 'Active' | 'Completed';
+  start_date: string | null;
+  end_date: string | null;
+  task_count: number;
+  completed_count: number;
+  blocked_count: number;
+  total_points: number;
+  completed_points: number;
+  created_at: string;
+}
+
+export interface PlanningBoard {
+  sprints: Sprint[];
+  backlog: Array<Task & { project_name: string }>;
 }
