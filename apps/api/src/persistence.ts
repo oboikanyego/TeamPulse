@@ -9,7 +9,9 @@ function normalizeDatabaseUrl(raw?: string): string | undefined {
     const region = process.env.DATABASE_REGION?.trim();
     if (/^dpg-[a-z0-9-]+$/i.test(url.hostname) && region) {
       url.hostname = `${url.hostname}.${region}-postgres.render.com`;
-      if (!url.searchParams.has('sslmode')) url.searchParams.set('sslmode','require');
+      url.searchParams.set('uselibpqcompat','true');
+      url.searchParams.set('sslmode','require');
+      url.searchParams.set('sslnegotiation','direct');
       return url.toString();
     }
     return value;
@@ -20,7 +22,11 @@ function normalizeDatabaseUrl(raw?: string): string | undefined {
 
 const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 const pool = databaseUrl
-  ? new Pool({ connectionString: databaseUrl, ssl: databaseUrl.includes('localhost') ? false : { rejectUnauthorized: false } })
+  ? new Pool({
+      connectionString: databaseUrl,
+      connectionTimeoutMillis: 10000,
+      keepAlive: true,
+    })
   : null;
 
 let persistenceAvailable = !!pool;
