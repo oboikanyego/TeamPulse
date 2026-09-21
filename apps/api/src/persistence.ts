@@ -11,7 +11,6 @@ function normalizeDatabaseUrl(raw?: string): string | undefined {
       url.hostname = `${url.hostname}.${region}-postgres.render.com`;
       url.searchParams.set('uselibpqcompat','true');
       url.searchParams.set('sslmode','require');
-      url.searchParams.set('sslnegotiation','direct');
       return url.toString();
     }
     return value;
